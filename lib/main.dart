@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'loading_screen.dart';
+import 'login_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
         colorScheme: .fromSeed(seedColor: Colors.deepPurple),
       ),
       home: LoadingScreen(
-        nextScreen: const MyHomePage(title: 'Expenses'),
+        nextScreen: const LoginScreen(),
       ),
     );
   }

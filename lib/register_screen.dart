@@ -1,409 +1,396 @@
 import 'package:flutter/material.dart';
-import 'dart:math';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
-
+class RegisterPage extends StatefulWidget {
+  const RegisterPage({super.key});
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<RegisterPage> createState() => _RegisterPageState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen>
+class _RegisterPageState extends State<RegisterPage>
     with TickerProviderStateMixin {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
-  bool _agreedToTerms = false;
-  int _selectedProfileType = -1; // -1 = none selected
 
-  final List<_ProfileTypeOption> _profileTypes = [
-    _ProfileTypeOption('Solo', Icons.person_outline_rounded),
-    _ProfileTypeOption('Family', Icons.family_restroom_rounded),
-    _ProfileTypeOption('Group', Icons.groups_outlined),
-    _ProfileTypeOption('Business', Icons.business_center_outlined),
-  ];
+  String _selectedType = '';
+  bool _isChecked = false;
+  bool _obscure = true;
+  bool _isLoading = false;
 
-  late AnimationController _orbRotationController;
-  late AnimationController _glowPulseController;
-  late AnimationController _fadeInController;
-  late AnimationController _particleController;
+  late AnimationController _orbController;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnim;
+  late Animation<double> _slideAnim;
 
-  late Animation<double> _titleFade;
-  late Animation<double> _orbFade;
-  late Animation<double> _formFade;
-  late Animation<Offset> _formSlide;
+  static const _indigo = Color(0xFF6366F1);
+  static const _violet = Color(0xFF8B5CF6);
+  static const _purple = Color(0xFFA855F7);
+  static const _bg = Color(0xFF0F1117);
 
   @override
   void initState() {
     super.initState();
-
-    _orbRotationController = AnimationController(
-      duration: const Duration(seconds: 6),
-      vsync: this,
-    )..repeat();
-
-    _glowPulseController = AnimationController(
-      duration: const Duration(milliseconds: 2500),
-      vsync: this,
+    _orbController = AnimationController(
+      vsync: this, duration: const Duration(seconds: 7),
     )..repeat(reverse: true);
 
-    _particleController = AnimationController(
-      duration: const Duration(seconds: 10),
-      vsync: this,
-    )..repeat();
-
-    _fadeInController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
+    _fadeController = AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 800),
     )..forward();
 
-    _titleFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _slideAnim = Tween<double>(begin: 20, end: 0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
-    _orbFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.1, 0.4, curve: Curves.easeOut),
-    );
-    _formFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.25, 0.7, curve: Curves.easeOut),
-    );
-    _formSlide = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.25, 0.7, curve: Curves.easeOutCubic),
-    ));
   }
 
   @override
   void dispose() {
+    _orbController.dispose();
+    _fadeController.dispose();
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _orbRotationController.dispose();
-    _glowPulseController.dispose();
-    _fadeInController.dispose();
-    _particleController.dispose();
     super.dispose();
+  }
+
+  Future<void> _register() async {
+    if (_nameController.text.trim().isEmpty ||
+        _emailController.text.trim().isEmpty ||
+        _passwordController.text.trim().isEmpty ||
+        _selectedType.isEmpty ||
+        !_isChecked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please complete all fields'),
+          backgroundColor: _indigo.withOpacity(0.9),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 1400));
+    setState(() => _isLoading = false);
+    // 👉 Your register logic here
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Account created successfully'),
+        backgroundColor: const Color(0xFF1D9E75),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050A05),
+      backgroundColor: _bg,
       body: Stack(
         children: [
-          // Background ambient glow
+          // ── Orbs ────────────────────────────────────────────
           AnimatedBuilder(
-            animation: _glowPulseController,
-            builder: (context, child) {
-              return Positioned.fill(
-                child: CustomPaint(
-                  painter: _RegisterBackgroundPainter(
-                    pulse: _glowPulseController.value,
-                  ),
-                ),
-              );
+            animation: _orbController,
+            builder: (_, __) {
+              final t = _orbController.value;
+              final w = MediaQuery.of(context).size.width;
+              final h = MediaQuery.of(context).size.height;
+              return Stack(children: [
+                _Orb(x: -70 + 30 * t, y: -90 + 40 * t,
+                    size: 300, color: _indigo.withOpacity(0.26)),
+                _Orb(x: w - 190 - 20 * t, y: h - 280 + 28 * t,
+                    size: 240, color: _purple.withOpacity(0.16)),
+                _Orb(x: -30 + 28 * t, y: h - 380 - 20 * t,
+                    size: 180,
+                    color: const Color(0xFF14B8A6).withOpacity(0.13)),
+              ]);
             },
           ),
 
-          // Floating particles
-          AnimatedBuilder(
-            animation: _particleController,
-            builder: (context, child) {
-              return Positioned.fill(
-                child: CustomPaint(
-                  painter: _RegisterParticlesPainter(
-                    time: _particleController.value,
-                    glow: _glowPulseController.value,
-                  ),
-                ),
-              );
-            },
-          ),
+          CustomPaint(size: Size.infinite, painter: _GridPainter()),
 
-          // Main scrollable content
+          // ── Content ─────────────────────────────────────────
           SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      MediaQuery.of(context).padding.bottom,
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 40),
+            child: AnimatedBuilder(
+              animation: _fadeAnim,
+              builder: (_, child) => Opacity(
+                opacity: _fadeAnim.value,
+                child: Transform.translate(
+                    offset: Offset(0, _slideAnim.value), child: child),
+              ),
+              child: Column(
+                children: [
+                  // Top bar
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: () => Navigator.pop(context),
+                            child: Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(11),
+                                border: Border.all(
+                                    color: Colors.white.withOpacity(0.08)),
+                              ),
+                              child: const Icon(Icons.chevron_left_rounded,
+                                  color: Colors.white54, size: 20),
+                            ),
+                          ),
+                        ),
+                        Text(
+                          'EXPENSES',
+                          style: TextStyle(
+                            fontFamily: 'SpaceMono',
+                            fontSize: 9,
+                            letterSpacing: 2.5,
+                            color: _indigo.withOpacity(0.6),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                    // "EXPENSES" app title
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _titleFade.value,
-                          child: ShaderMask(
-                            shaderCallback: (bounds) =>
-                                const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF6B7D8E),
-                                Color(0xFFD4E0EC),
-                                Color(0xFFFFFFFF),
-                                Color(0xFFD4E0EC),
-                                Color(0xFF8A9BAB),
-                              ],
-                              stops: [0.0, 0.25, 0.5, 0.75, 1.0],
-                            ).createShader(bounds),
-                            child: const Text(
-                              'EXPENSES',
+                  const SizedBox(height: 14),
+
+                  // Bottom sheet
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.025),
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(28)),
+                        border: Border(
+                          top: BorderSide(
+                              color: Colors.white.withOpacity(0.07)),
+                        ),
+                      ),
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Create account',
                               style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 10,
-                                color: Colors.white,
-                                fontStyle: FontStyle.italic,
+                                fontFamily: 'Outfit',
+                                fontSize: 24,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.4,
+                                color: Color(0xFFF8FAFC),
                               ),
                             ),
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // "CREATE YOUR OWN ACCOUNT" subtitle
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _titleFade.value,
-                          child: Column(
-                            children: [
-                              Text(
-                                'CREATE YOUR OWN ACCOUNT',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 3,
-                                  color: const Color(0xFF00FF66)
-                                      .withValues(alpha: 0.8),
-                                ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Start tracking in minutes.',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w300,
+                                color:
+                                    const Color(0xFFF8FAFC).withOpacity(0.35),
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            ),
 
-                    const SizedBox(height: 18),
+                            const SizedBox(height: 22),
 
-                    // Small rotating orb
-                    AnimatedBuilder(
-                      animation: Listenable.merge([
-                        _orbRotationController,
-                        _glowPulseController,
-                        _fadeInController,
-                      ]),
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _orbFade.value,
-                          child: SizedBox(
-                            width: 80,
-                            height: 80,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Glow behind orb
-                                Container(
-                                  width: 60,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF00FF66)
-                                            .withValues(
-                                          alpha: 0.12 +
-                                              _glowPulseController.value *
-                                                  0.1,
-                                        ),
-                                        blurRadius: 30 +
-                                            _glowPulseController.value * 15,
-                                        spreadRadius: 5 +
-                                            _glowPulseController.value * 8,
-                                      ),
-                                    ],
-                                  ),
+                            _FieldLabel(label: 'Full name'),
+                            const SizedBox(height: 6),
+                            _StyledField(
+                              controller: _nameController,
+                              hint: 'Jane Doe',
+                              icon: Icons.person_outline_rounded,
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            _FieldLabel(label: 'Email address'),
+                            const SizedBox(height: 6),
+                            _StyledField(
+                              controller: _emailController,
+                              hint: 'jane@example.com',
+                              icon: Icons.mail_outline_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            _FieldLabel(label: 'Password'),
+                            const SizedBox(height: 6),
+                            _StyledField(
+                              controller: _passwordController,
+                              hint: '••••••••••',
+                              icon: Icons.lock_outline_rounded,
+                              obscure: _obscure,
+                              suffix: IconButton(
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 17,
+                                  color: Colors.white.withOpacity(0.28),
                                 ),
-                                Transform.rotate(
-                                  angle:
-                                      _orbRotationController.value * 2 * pi,
-                                  child: CustomPaint(
-                                    size: const Size(80, 80),
-                                    painter: _MiniOrbPainter(
-                                      rotation:
-                                          _orbRotationController.value,
-                                      glow: _glowPulseController.value,
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                              ),
+                            ),
+
+                            const SizedBox(height: 22),
+
+                            _FieldLabel(label: 'Profile type'),
+                            const SizedBox(height: 10),
+
+                            Row(
+                              children: [
+                                _ProfileChip(
+                                  label: 'Student',
+                                  icon: Icons.school_outlined,
+                                  isSelected: _selectedType == 'Student',
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Student'),
+                                ),
+                                const SizedBox(width: 10),
+                                _ProfileChip(
+                                  label: 'Employee',
+                                  icon: Icons.work_outline_rounded,
+                                  isSelected: _selectedType == 'Employee',
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Employee'),
+                                ),
+                                const SizedBox(width: 10),
+                                _ProfileChip(
+                                  label: 'Other',
+                                  icon: Icons.person_outline_rounded,
+                                  isSelected: _selectedType == 'Other',
+                                  onTap: () =>
+                                      setState(() => _selectedType = 'Other'),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Checkbox
+                            GestureDetector(
+                              onTap: () =>
+                                  setState(() => _isChecked = !_isChecked),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  AnimatedContainer(
+                                    duration:
+                                        const Duration(milliseconds: 200),
+                                    width: 20, height: 20,
+                                    decoration: BoxDecoration(
+                                      color: _isChecked
+                                          ? _indigo.withOpacity(0.2)
+                                          : Colors.transparent,
+                                      borderRadius:
+                                          BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: _isChecked
+                                            ? _indigo.withOpacity(0.6)
+                                            : Colors.white.withOpacity(0.2),
+                                      ),
+                                    ),
+                                    child: _isChecked
+                                        ? const Icon(Icons.check_rounded,
+                                            size: 13,
+                                            color: Color(0xFF818CF8))
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: RichText(
+                                      text: TextSpan(
+                                        style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 12,
+                                          height: 1.5,
+                                          color: Colors.white
+                                              .withOpacity(0.35),
+                                        ),
+                                        children: const [
+                                          TextSpan(text: 'I agree to the '),
+                                          TextSpan(
+                                            text: 'Terms of Service',
+                                            style: TextStyle(
+                                                color: Color(0xFF818CF8)),
+                                          ),
+                                          TextSpan(text: ' and '),
+                                          TextSpan(
+                                            text: 'Privacy Policy',
+                                            style: TextStyle(
+                                                color: Color(0xFF818CF8)),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // Register button
+                            _GradientButton(
+                              label: 'Create account',
+                              isLoading: _isLoading,
+                              colors: [_indigo, _violet, _purple],
+                              onTap: _register,
+                            ),
+
+                            const SizedBox(height: 18),
+
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Already have an account?',
+                                  style: TextStyle(
+                                    fontFamily: 'Outfit',
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.28),
+                                  ),
                                 ),
-                                // Core dot
-                                Container(
-                                  width: 5,
-                                  height: 5,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF00FF88)
-                                            .withValues(alpha: 0.7),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(context),
+                                  style: TextButton.styleFrom(
+                                      padding:
+                                          const EdgeInsets.only(left: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize:
+                                          MaterialTapTargetSize.shrinkWrap),
+                                  child: const Text(
+                                    'Sign in',
+                                    style: TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF818CF8),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    // Form fields with slide-in animation
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return SlideTransition(
-                          position: _formSlide,
-                          child: Opacity(
-                            opacity: _formFade.value,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Full Name field
-                          _buildFieldLabel('Full Name'),
-                          const SizedBox(height: 8),
-                          _buildGlowingTextField(
-                            controller: _nameController,
-                            hint: 'Enter your full name',
-                            icon: Icons.person_outline_rounded,
-                          ),
-
-                          const SizedBox(height: 18),
-
-                          // Email field
-                          _buildFieldLabel('Email Address'),
-                          const SizedBox(height: 8),
-                          _buildGlowingTextField(
-                            controller: _emailController,
-                            hint: 'Enter your email',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-
-                          const SizedBox(height: 18),
-
-                          // Password field
-                          _buildFieldLabel('Password'),
-                          const SizedBox(height: 8),
-                          _buildGlowingTextField(
-                            controller: _passwordController,
-                            hint: 'Create a password',
-                            icon: Icons.lock_outline_rounded,
-                            obscure: _obscurePassword,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: const Color(0xFF00CC66)
-                                    .withValues(alpha: 0.5),
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          // Profile type selection
-                          _buildFieldLabel('Select Your Profile Type'),
-                          const SizedBox(height: 12),
-                          _buildProfileTypeSelector(),
-
-                          const SizedBox(height: 24),
-
-                          // Terms checkbox
-                          _buildTermsCheckbox(),
-
-                          const SizedBox(height: 28),
-
-                          // Register button
-                          _buildRegisterButton(),
-
-                          const SizedBox(height: 24),
-
-                          // Login link
-                          Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.pop(context);
-                              },
-                              child: RichText(
-                                text: TextSpan(
-                                  text: 'Already have an Account? ',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.white
-                                        .withValues(alpha: 0.4),
-                                    fontWeight: FontWeight.w300,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: 'Login',
-                                      style: TextStyle(
-                                        color: const Color(0xFF00FF66)
-                                            .withValues(alpha: 0.9),
-                                        fontWeight: FontWeight.w600,
-                                        decoration:
-                                            TextDecoration.underline,
-                                        decorationColor:
-                                            const Color(0xFF00FF66)
-                                                .withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
-
-                    const SizedBox(height: 40),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -411,550 +398,251 @@ class _RegisterScreenState extends State<RegisterScreen>
       ),
     );
   }
+}
 
-  Widget _buildFieldLabel(String label) {
-    return Text(
-      label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
-        color: Colors.white.withValues(alpha: 0.6),
-        letterSpacing: 1,
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+class _Orb extends StatelessWidget {
+  final double x, y, size;
+  final Color color;
+  const _Orb(
+      {required this.x,
+      required this.y,
+      required this.size,
+      required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: x, top: y,
+      child: Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [color, Colors.transparent]),
+        ),
       ),
-    );
-  }
-
-  Widget _buildGlowingTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    Widget? suffixIcon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        final glowAlpha = 0.15 + _glowPulseController.value * 0.1;
-        return Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00FF66).withValues(alpha: glowAlpha),
-                blurRadius: 12 + _glowPulseController.value * 6,
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontSize: 14,
-              fontWeight: FontWeight.w300,
-            ),
-            cursorColor: const Color(0xFF00FF66),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.2),
-                fontSize: 13,
-                fontWeight: FontWeight.w300,
-              ),
-              prefixIcon: Icon(
-                icon,
-                color: const Color(0xFF00CC66).withValues(alpha: 0.5),
-                size: 20,
-              ),
-              suffixIcon: suffixIcon,
-              filled: true,
-              fillColor: const Color(0xFF0A1A0E).withValues(alpha: 0.9),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.2),
-                  width: 1,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.6),
-                  width: 1.5,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileTypeSelector() {
-    return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        return Row(
-          children: List.generate(_profileTypes.length, (index) {
-            final isSelected = _selectedProfileType == index;
-            final type = _profileTypes[index];
-            final pulseVal = _glowPulseController.value;
-
-            return Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedProfileType = index;
-                  });
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  curve: Curves.easeOutCubic,
-                  margin: EdgeInsets.only(
-                    right: index < _profileTypes.length - 1 ? 8 : 0,
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: isSelected
-                        ? const Color(0xFF0D2A14).withValues(alpha: 0.95)
-                        : const Color(0xFF0A1A0E).withValues(alpha: 0.8),
-                    border: Border.all(
-                      color: isSelected
-                          ? const Color(0xFF00FF66)
-                              .withValues(alpha: 0.6 + pulseVal * 0.2)
-                          : const Color(0xFF00FF66).withValues(alpha: 0.12),
-                      width: isSelected ? 1.5 : 1,
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: const Color(0xFF00FF66)
-                                  .withValues(alpha: 0.2 + pulseVal * 0.1),
-                              blurRadius: 14 + pulseVal * 6,
-                              spreadRadius: 0,
-                            ),
-                          ]
-                        : [],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        type.icon,
-                        size: 22,
-                        color: isSelected
-                            ? const Color(0xFF00FF66)
-                                .withValues(alpha: 0.9)
-                            : Colors.white.withValues(alpha: 0.3),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        type.label,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight:
-                              isSelected ? FontWeight.w600 : FontWeight.w400,
-                          color: isSelected
-                              ? const Color(0xFF00FF66)
-                                  .withValues(alpha: 0.9)
-                              : Colors.white.withValues(alpha: 0.35),
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        );
-      },
-    );
-  }
-
-  Widget _buildTermsCheckbox() {
-    return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _agreedToTerms = !_agreedToTerms;
-            });
-          },
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Custom glowing checkbox
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(5),
-                  color: _agreedToTerms
-                      ? const Color(0xFF0D2A14)
-                      : const Color(0xFF0A1A0E).withValues(alpha: 0.9),
-                  border: Border.all(
-                    color: _agreedToTerms
-                        ? const Color(0xFF00FF66).withValues(alpha: 0.7)
-                        : const Color(0xFF00FF66).withValues(alpha: 0.2),
-                    width: 1.5,
-                  ),
-                  boxShadow: _agreedToTerms
-                      ? [
-                          BoxShadow(
-                            color: const Color(0xFF00FF66).withValues(
-                                alpha:
-                                    0.25 + _glowPulseController.value * 0.1),
-                            blurRadius:
-                                10 + _glowPulseController.value * 4,
-                            spreadRadius: 0,
-                          ),
-                        ]
-                      : [],
-                ),
-                child: _agreedToTerms
-                    ? const Icon(
-                        Icons.check_rounded,
-                        size: 14,
-                        color: Color(0xFF00FF66),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    text: 'Agreement of ',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontWeight: FontWeight.w300,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: 'services',
-                        style: TextStyle(
-                          color: const Color(0xFF00FF66)
-                              .withValues(alpha: 0.7),
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
-                          decorationColor: const Color(0xFF00FF66)
-                              .withValues(alpha: 0.3),
-                        ),
-                      ),
-                      TextSpan(
-                        text: ' & ',
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      TextSpan(
-                        text: 'conditions',
-                        style: TextStyle(
-                          color: const Color(0xFF00FF66)
-                              .withValues(alpha: 0.7),
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
-                          decorationColor: const Color(0xFF00FF66)
-                              .withValues(alpha: 0.3),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildRegisterButton() {
-    return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        final glowIntensity = 0.3 + _glowPulseController.value * 0.2;
-        return Container(
-          width: double.infinity,
-          height: 52,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color:
-                    const Color(0xFF00FF66).withValues(alpha: glowIntensity),
-                blurRadius: 18 + _glowPulseController.value * 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-              BoxShadow(
-                color: const Color(0xFF00CC44)
-                    .withValues(alpha: glowIntensity * 0.5),
-                blurRadius: 30,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: ElevatedButton(
-            onPressed: () {
-              // Handle registration
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D2A14),
-              foregroundColor: const Color(0xFF00FF66),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: const Text(
-              'Register',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2,
-              ),
-            ),
-          ),
-        );
-      },
     );
   }
 }
 
-class _ProfileTypeOption {
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = Colors.white.withOpacity(0.022)
+      ..strokeWidth = 0.5;
+    const step = 32.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class _FieldLabel extends StatelessWidget {
+  final String label;
+  const _FieldLabel({required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      label.toUpperCase(),
+      style: TextStyle(
+        fontFamily: 'Outfit',
+        fontSize: 10,
+        letterSpacing: 0.9,
+        color: Colors.white.withOpacity(0.32),
+      ),
+    );
+  }
+}
+
+class _StyledField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final bool obscure;
+  final TextInputType? keyboardType;
+  final Widget? suffix;
+
+  const _StyledField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.obscure = false,
+    this.keyboardType,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: const TextStyle(
+          fontFamily: 'Outfit', fontSize: 13, color: Color(0xFFF8FAFC)),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+            fontFamily: 'Outfit',
+            fontSize: 13,
+            color: Colors.white.withOpacity(0.28)),
+        prefixIcon:
+            Icon(icon, size: 17, color: Colors.white.withOpacity(0.28)),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.04),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+              BorderSide(color: Colors.white.withOpacity(0.09), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.2),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileChip extends StatelessWidget {
   final String label;
   final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
 
-  _ProfileTypeOption(this.label, this.icon);
-}
-
-// Background glow for register page
-class _RegisterBackgroundPainter extends CustomPainter {
-  final double pulse;
-
-  _RegisterBackgroundPainter({required this.pulse});
+  const _ProfileChip({
+    required this.label,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    // Top center glow
-    final topCenter = Offset(size.width / 2, size.height * 0.2);
-    final topPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF003311).withValues(alpha: 0.35 + pulse * 0.1),
-          const Color(0xFF001A08).withValues(alpha: 0.15 + pulse * 0.05),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.35, 1.0],
-      ).createShader(
-        Rect.fromCenter(
-          center: topCenter,
-          width: size.width * 1.4,
-          height: size.height * 0.7,
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? const Color(0xFF6366F1).withOpacity(0.15)
+                : Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? const Color(0xFF6366F1).withOpacity(0.45)
+                  : Colors.white.withOpacity(0.08),
+              width: isSelected ? 1.2 : 1,
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: isSelected
+                    ? const Color(0xFF818CF8)
+                    : Colors.white.withOpacity(0.3),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  color: isSelected
+                      ? const Color(0xFF818CF8).withOpacity(0.9)
+                      : Colors.white.withOpacity(0.35),
+                ),
+              ),
+            ],
+          ),
         ),
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      topPaint,
-    );
-
-    // Mid glow near profile types
-    final midCenter = Offset(size.width / 2, size.height * 0.6);
-    final midPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF002211).withValues(alpha: 0.1 + pulse * 0.04),
-          Colors.transparent,
-        ],
-      ).createShader(
-        Rect.fromCenter(
-          center: midCenter,
-          width: size.width * 1.0,
-          height: size.height * 0.3,
-        ),
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      midPaint,
-    );
-
-    // Bottom edge glow near the button
-    final bottomCenter = Offset(size.width / 2, size.height * 0.85);
-    final bottomPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF002211).withValues(alpha: 0.15 + pulse * 0.05),
-          Colors.transparent,
-        ],
-      ).createShader(
-        Rect.fromCenter(
-          center: bottomCenter,
-          width: size.width,
-          height: size.height * 0.3,
-        ),
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      bottomPaint,
+      ),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant _RegisterBackgroundPainter oldDelegate) =>
-      oldDelegate.pulse != pulse;
 }
 
-// Floating particles for register screen
-class _RegisterParticlesPainter extends CustomPainter {
-  final double time;
-  final double glow;
+class _GradientButton extends StatefulWidget {
+  final String label;
+  final bool isLoading;
+  final List<Color> colors;
+  final VoidCallback onTap;
 
-  _RegisterParticlesPainter({required this.time, required this.glow});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final random = Random(77);
-    for (int i = 0; i < 18; i++) {
-      final baseX = random.nextDouble();
-      final baseY = random.nextDouble();
-      final speed = 0.2 + random.nextDouble() * 0.5;
-      final phase = random.nextDouble() * 2 * pi;
-      final pSize = 0.4 + random.nextDouble() * 1.5;
-
-      final x =
-          (baseX + sin(time * 2 * pi * speed + phase) * 0.02) * size.width;
-      final y = ((baseY + time * speed * 0.08) % 1.0) * size.height;
-      final alpha = (0.1 + glow * 0.1) * (1.0 - (y / size.height) * 0.4);
-
-      final paint = Paint()
-        ..color =
-            const Color(0xFF00FF88).withValues(alpha: alpha.clamp(0.0, 1.0));
-      canvas.drawCircle(Offset(x, y), pSize, paint);
-
-      final glowPaint = Paint()
-        ..color = const Color(0xFF00FF66)
-            .withValues(alpha: (alpha * 0.25).clamp(0.0, 1.0))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-      canvas.drawCircle(Offset(x, y), pSize * 2, glowPaint);
-    }
-  }
+  const _GradientButton({
+    required this.label,
+    required this.isLoading,
+    required this.colors,
+    required this.onTap,
+  });
 
   @override
-  bool shouldRepaint(covariant _RegisterParticlesPainter oldDelegate) => true;
+  State<_GradientButton> createState() => _GradientButtonState();
 }
 
-// Mini orb painter (same as login screen)
-class _MiniOrbPainter extends CustomPainter {
-  final double rotation;
-  final double glow;
-
-  _MiniOrbPainter({required this.rotation, required this.glow});
+class _GradientButtonState extends State<_GradientButton> {
+  bool _pressed = false;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2 * 0.8;
-
-    for (int layer = 0; layer < 2; layer++) {
-      for (int i = 0; i < 4; i++) {
-        final paint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round;
-
-        final layerAlpha = [0.6, 0.25][layer];
-        final layerWidth = [1.8, 4.5][layer];
-        final blur = [0.0, 5.0][layer];
-
-        final hue = 130.0 + i * 22.0 - 35.0;
-        paint.color = HSLColor.fromAHSL(
-          (layerAlpha + glow * 0.12).clamp(0.0, 1.0),
-          hue.clamp(85.0, 165.0),
-          (0.75 + glow * 0.25).clamp(0.0, 1.0),
-          (0.4 + glow * 0.12 + layer * -0.05).clamp(0.0, 1.0),
-        ).toColor();
-        paint.strokeWidth = layerWidth + glow * 0.6;
-
-        if (blur > 0) {
-          paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
-        }
-
-        final path = Path();
-        final angleOffset = i * (2 * pi / 4);
-        final timeShift = rotation * 2 * pi;
-
-        final points = <Offset>[];
-        for (double t = 0; t <= 1.0; t += 0.02) {
-          final baseAngle = angleOffset + t * 2.5 * pi + timeShift;
-          final r1 = sin(t * pi) * 0.85;
-          final r2 = sin(t * 4.5 + timeShift * 1.3 + i) * 0.12;
-          final radiusFactor = (r1 + r2).clamp(0.0, 1.0);
-          final radius = maxRadius * (0.15 + 0.85 * radiusFactor);
-
-          final displacement =
-              sin(t * 6 + timeShift * 2.0 + i * 1.3) * 6 * sin(t * pi);
-          final x = center.dx +
-              cos(baseAngle) * radius +
-              cos(baseAngle + pi / 2) * displacement;
-          final y = center.dy +
-              sin(baseAngle) * radius +
-              sin(baseAngle + pi / 2) * displacement;
-          points.add(Offset(x, y));
-        }
-
-        if (points.length < 3) continue;
-
-        path.moveTo(points[0].dx, points[0].dy);
-        for (int j = 1; j < points.length - 1; j++) {
-          final midX = (points[j].dx + points[j + 1].dx) / 2;
-          final midY = (points[j].dy + points[j + 1].dy) / 2;
-          path.quadraticBezierTo(points[j].dx, points[j].dy, midX, midY);
-        }
-        canvas.drawPath(path, paint);
-      }
-    }
-
-    // Accent dots
-    final random = Random(13);
-    for (int i = 0; i < 10; i++) {
-      final angle =
-          (i * pi / 5) + (rotation * 2 * pi * 0.6) + random.nextDouble();
-      final radiusFactor =
-          0.2 + 0.5 * sin(i * 0.8 + rotation * 4 * pi).abs();
-      final r = maxRadius * radiusFactor;
-      final x = center.dx + cos(angle) * r;
-      final y = center.dy + sin(angle) * r;
-
-      final dotPaint = Paint()
-        ..color = Color.lerp(
-          const Color(0xFF00FF66),
-          const Color(0xFF88FFCC),
-          glow,
-        )!.withValues(alpha: (0.5 + glow * 0.4).clamp(0.0, 1.0));
-      canvas.drawCircle(Offset(x, y), 1.0 + glow * 0.6, dotPaint);
-
-      final haloPaint = Paint()
-        ..color = const Color(0xFF00FF66).withValues(alpha: 0.15)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-      canvas.drawCircle(Offset(x, y), 3 + glow, haloPaint);
-    }
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
+          width: double.infinity,
+          height: 50,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            gradient: LinearGradient(
+              colors: widget.colors,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: widget.colors.first.withOpacity(0.3),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Center(
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.white, strokeWidth: 2))
+                : Text(
+                    widget.label.toUpperCase(),
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.4,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
   }
-
-  @override
-  bool shouldRepaint(covariant _MiniOrbPainter oldDelegate) => true;
 }

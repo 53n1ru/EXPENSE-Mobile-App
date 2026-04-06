@@ -1,406 +1,300 @@
-import 'package:flutter/material.dart';
 import 'dart:math';
-import 'register_screen.dart';
+import 'package:flutter/material.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-
+class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _LoginPageState extends State<LoginPage>
     with TickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true;
+  bool _obscure = true;
+  bool _isLoading = false;
 
-  late AnimationController _orbRotationController;
-  late AnimationController _glowPulseController;
-  late AnimationController _fadeInController;
-  late AnimationController _particleController;
+  late AnimationController _orbController;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnim;
+  late Animation<double> _slideAnim;
 
-  late Animation<double> _titleFade;
-  late Animation<double> _orbFade;
-  late Animation<double> _formFade;
-  late Animation<Offset> _formSlide;
+  static const _indigo = Color(0xFF6366F1);
+  static const _violet = Color(0xFF8B5CF6);
+  static const _purple = Color(0xFFA855F7);
+  static const _bg = Color(0xFF0F1117);
 
   @override
   void initState() {
     super.initState();
-
-    _orbRotationController = AnimationController(
-      duration: const Duration(seconds: 6),
+    _orbController = AnimationController(
       vsync: this,
-    )..repeat();
-
-    _glowPulseController = AnimationController(
-      duration: const Duration(milliseconds: 2500),
-      vsync: this,
+      duration: const Duration(seconds: 7),
     )..repeat(reverse: true);
 
-    _particleController = AnimationController(
-      duration: const Duration(seconds: 10),
+    _fadeController = AnimationController(
       vsync: this,
-    )..repeat();
-
-    _fadeInController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
+      duration: const Duration(milliseconds: 800),
     )..forward();
 
-    _titleFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _slideAnim = Tween<double>(begin: 20, end: 0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
-    _orbFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.1, 0.4, curve: Curves.easeOut),
-    );
-    _formFade = CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.25, 0.7, curve: Curves.easeOut),
-    );
-    _formSlide = Tween<Offset>(
-      begin: const Offset(0, 0.08),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _fadeInController,
-      curve: const Interval(0.25, 0.7, curve: Curves.easeOutCubic),
-    ));
   }
 
   @override
   void dispose() {
+    _orbController.dispose();
+    _fadeController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _orbRotationController.dispose();
-    _glowPulseController.dispose();
-    _fadeInController.dispose();
-    _particleController.dispose();
     super.dispose();
+  }
+
+  Future<void> _login() async {
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please fill all fields'),
+          backgroundColor: _indigo.withOpacity(0.9),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    await Future.delayed(const Duration(milliseconds: 1200));
+    setState(() => _isLoading = false);
+    // 👉 Your login logic here
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Login successful'),
+        backgroundColor: const Color(0xFF1D9E75),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF050A05),
+      backgroundColor: _bg,
       body: Stack(
         children: [
-          // Background ambient glow
+          // ── Animated orbs ───────────────────────────────────
           AnimatedBuilder(
-            animation: _glowPulseController,
-            builder: (context, child) {
-              return Positioned.fill(
-                child: CustomPaint(
-                  painter: _LoginBackgroundPainter(
-                    pulse: _glowPulseController.value,
-                  ),
-                ),
-              );
+            animation: _orbController,
+            builder: (_, __) {
+              final t = _orbController.value;
+              return Stack(children: [
+                _Orb(x: -70 + 30 * t, y: -90 + 40 * t, size: 300,
+                    color: _indigo.withOpacity(0.28)),
+                _Orb(
+                    x: MediaQuery.of(context).size.width - 190 - 20 * t,
+                    y: MediaQuery.of(context).size.height - 280 + 28 * t,
+                    size: 240, color: _purple.withOpacity(0.18)),
+                _Orb(x: -30 + 28 * t,
+                    y: MediaQuery.of(context).size.height - 380 - 20 * t,
+                    size: 180, color: const Color(0xFF14B8A6).withOpacity(0.14)),
+              ]);
             },
           ),
 
-          // Floating particles
-          AnimatedBuilder(
-            animation: _particleController,
-            builder: (context, child) {
-              return Positioned.fill(
-                child: CustomPaint(
-                  painter: _LoginParticlesPainter(
-                    time: _particleController.value,
-                    glow: _glowPulseController.value,
-                  ),
-                ),
-              );
-            },
-          ),
+          // ── Grid ────────────────────────────────────────────
+          CustomPaint(size: Size.infinite, painter: _GridPainter()),
 
-          // Main scrollable content
+          // ── Content ─────────────────────────────────────────
           SafeArea(
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      MediaQuery.of(context).padding.bottom,
+            child: AnimatedBuilder(
+              animation: _fadeAnim,
+              builder: (_, child) => Opacity(
+                opacity: _fadeAnim.value,
+                child: Transform.translate(
+                  offset: Offset(0, _slideAnim.value),
+                  child: child,
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(height: 50),
+              ),
+              child: Center(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const SizedBox(height: 16),
 
-                    // "EXPENSES" app title
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _titleFade.value,
-                          child: ShaderMask(
-                            shaderCallback: (bounds) =>
-                                const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF6B7D8E),
-                                Color(0xFFD4E0EC),
-                                Color(0xFFFFFFFF),
-                                Color(0xFFD4E0EC),
-                                Color(0xFF8A9BAB),
-                              ],
-                              stops: [0.0, 0.25, 0.5, 0.75, 1.0],
-                            ).createShader(bounds),
-                            child: const Text(
-                              'EXPENSES',
-                              style: TextStyle(
-                                fontSize: 30,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 10,
-                                color: Colors.white,
-                                fontStyle: FontStyle.italic,
-                              ),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                      // Avatar badge
+                      _AvatarBadge(controller: _orbController),
+                      const SizedBox(height: 20),
 
-                    const SizedBox(height: 20),
-
-                    // "LOGIN" subtitle
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _titleFade.value,
-                          child: Text(
-                            'LOGIN',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 6,
-                              color: const Color(0xFF00FF66)
-                                  .withValues(alpha: 0.8),
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // Small rotating orb
-                    AnimatedBuilder(
-                      animation: Listenable.merge([
-                        _orbRotationController,
-                        _glowPulseController,
-                        _fadeInController,
-                      ]),
-                      builder: (context, child) {
-                        return Opacity(
-                          opacity: _orbFade.value,
-                          child: SizedBox(
-                            width: 90,
-                            height: 90,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [
-                                // Glow behind orb
-                                Container(
-                                  width: 70,
-                                  height: 70,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF00FF66)
-                                            .withValues(
-                                          alpha: 0.12 +
-                                              _glowPulseController.value *
-                                                  0.1,
-                                        ),
-                                        blurRadius: 30 +
-                                            _glowPulseController.value * 15,
-                                        spreadRadius: 5 +
-                                            _glowPulseController.value * 8,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Transform.rotate(
-                                  angle:
-                                      _orbRotationController.value * 2 * pi,
-                                  child: CustomPaint(
-                                    size: const Size(90, 90),
-                                    painter: _MiniOrbPainter(
-                                      rotation:
-                                          _orbRotationController.value,
-                                      glow: _glowPulseController.value,
-                                    ),
-                                  ),
-                                ),
-                                // Core dot
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.white.withValues(alpha: 0.9),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF00FF88)
-                                            .withValues(alpha: 0.7),
-                                        blurRadius: 8,
-                                        spreadRadius: 2,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 36),
-
-                    // Form fields with slide-in animation
-                    AnimatedBuilder(
-                      animation: _fadeInController,
-                      builder: (context, child) {
-                        return SlideTransition(
-                          position: _formSlide,
-                          child: Opacity(
-                            opacity: _formFade.value,
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Email field
-                          _buildFieldLabel('Email Address'),
-                          const SizedBox(height: 8),
-                          _buildGlowingTextField(
-                            controller: _emailController,
-                            hint: 'Enter your email',
-                            icon: Icons.email_outlined,
-                            keyboardType: TextInputType.emailAddress,
-                          ),
-
-                          const SizedBox(height: 22),
-
-                          // Password field
-                          _buildFieldLabel('Password'),
-                          const SizedBox(height: 8),
-                          _buildGlowingTextField(
-                            controller: _passwordController,
-                            hint: 'Enter your password',
-                            icon: Icons.lock_outline_rounded,
-                            obscure: _obscurePassword,
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility_off_outlined
-                                    : Icons.visibility_outlined,
-                                color: const Color(0xFF00CC66)
-                                    .withValues(alpha: 0.5),
-                                size: 20,
-                              ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
-                            ),
-                          ),
-
-                          const SizedBox(height: 12),
-
-                          // Forgot password
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: GestureDetector(
-                              onTap: () {},
-                              child: Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: const Color(0xFF00FF66)
-                                      .withValues(alpha: 0.6),
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 32),
-
-                          // Login button
-                          _buildLoginButton(),
-
-                          const SizedBox(height: 28),
-
-                          // Register link
-                          Center(
-                            child: GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) =>
-                                        const RegisterScreen(),
-                                    transitionsBuilder:
-                                        (context, animation, secondaryAnimation, child) {
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: child,
-                                      );
-                                    },
-                                    transitionDuration:
-                                        const Duration(milliseconds: 500),
-                                  ),
-                                );
-                              },
-                              child: RichText(
-                                text: TextSpan(
-                                  text: 'Do not have an Account? ',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.white
-                                        .withValues(alpha: 0.4),
-                                    fontWeight: FontWeight.w300,
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: 'Register',
-                                      style: TextStyle(
-                                        color: const Color(0xFF00FF66)
-                                            .withValues(alpha: 0.9),
-                                        fontWeight: FontWeight.w600,
-                                        decoration:
-                                            TextDecoration.underline,
-                                        decorationColor:
-                                            const Color(0xFF00FF66)
-                                                .withValues(alpha: 0.4),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
+                      // Labels
+                      Text(
+                        'WELCOME BACK',
+                        style: TextStyle(
+                          fontFamily: 'SpaceMono',
+                          fontSize: 9,
+                          letterSpacing: 2.5,
+                          color: _indigo.withOpacity(0.65),
+                        ),
                       ),
-                    ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Sign in',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                          color: Color(0xFFF8FAFC),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Track your spending, own your money.',
+                        style: TextStyle(
+                          fontFamily: 'Outfit',
+                          fontSize: 13,
+                          fontWeight: FontWeight.w300,
+                          color: const Color(0xFFF8FAFC).withOpacity(0.38),
+                        ),
+                      ),
 
-                    const SizedBox(height: 40),
-                  ],
+                      const SizedBox(height: 36),
+
+                      // Email field
+                      _FieldLabel(label: 'Email address'),
+                      const SizedBox(height: 6),
+                      _StyledField(
+                        controller: _emailController,
+                        hint: 'you@example.com',
+                        icon: Icons.mail_outline_rounded,
+                        keyboardType: TextInputType.emailAddress,
+                      ),
+
+                      const SizedBox(height: 14),
+
+                      // Password field
+                      _FieldLabel(label: 'Password'),
+                      const SizedBox(height: 6),
+                      _StyledField(
+                        controller: _passwordController,
+                        hint: '••••••••••',
+                        icon: Icons.lock_outline_rounded,
+                        obscure: _obscure,
+                        suffix: IconButton(
+                          icon: Icon(
+                            _obscure
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            size: 18,
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                          onPressed: () =>
+                              setState(() => _obscure = !_obscure),
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Forgot password
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () {},
+                          style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          child: Text(
+                            'Forgot password?',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 12,
+                              color: _indigo.withOpacity(0.7),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Login button
+                      _GradientButton(
+                        label: 'Continue',
+                        isLoading: _isLoading,
+                        colors: [_indigo, _violet, _purple],
+                        onTap: _login,
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Divider
+                      Row(children: [
+                        Expanded(child: Container(height: 1,
+                            color: Colors.white.withOpacity(0.07))),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'or continue with',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 11,
+                              color: Colors.white.withOpacity(0.25),
+                            ),
+                          ),
+                        ),
+                        Expanded(child: Container(height: 1,
+                            color: Colors.white.withOpacity(0.07))),
+                      ]),
+
+                      const SizedBox(height: 16),
+
+                      // Social buttons
+                      Row(children: [
+                        Expanded(child: _SocialButton(label: 'Google',
+                            icon: Icons.g_mobiledata_rounded)),
+                        const SizedBox(width: 10),
+                        Expanded(child: _SocialButton(label: 'Apple',
+                            icon: Icons.apple_rounded)),
+                      ]),
+
+                      const SizedBox(height: 24),
+
+                      // Sign up
+                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+                        Text(
+                          'No account yet?',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.3),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () =>
+                              Navigator.pushNamed(context, '/register'),
+                          style: TextButton.styleFrom(
+                              padding: const EdgeInsets.only(left: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                          child: const Text(
+                            'Create one',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Color(0xFF818CF8),
+                            ),
+                          ),
+                        ),
+                      ]),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -409,339 +303,254 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
+}
 
-  Widget _buildFieldLabel(String label) {
-    return Text(
-      label,
-      style: TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w400,
-        color: Colors.white.withValues(alpha: 0.6),
-        letterSpacing: 1,
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+class _Orb extends StatelessWidget {
+  final double x, y, size;
+  final Color color;
+  const _Orb({required this.x, required this.y, required this.size, required this.color});
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: x, top: y,
+      child: Container(
+        width: size, height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: RadialGradient(colors: [color, Colors.transparent]),
+        ),
       ),
     );
   }
+}
 
-  Widget _buildGlowingTextField({
-    required TextEditingController controller,
-    required String hint,
-    required IconData icon,
-    bool obscure = false,
-    Widget? suffixIcon,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final p = Paint()
+      ..color = Colors.white.withOpacity(0.022)
+      ..strokeWidth = 0.5;
+    const step = 32.0;
+    for (double x = 0; x < size.width; x += step) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);
+    }
+    for (double y = 0; y < size.height; y += step) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
+    }
+  }
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+class _AvatarBadge extends StatelessWidget {
+  final AnimationController controller;
+  const _AvatarBadge({required this.controller});
+  @override
+  Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        final glowAlpha = 0.15 + _glowPulseController.value * 0.1;
+      animation: controller,
+      builder: (_, child) {
+        final glow = 0.05 + 0.1 * controller.value;
         return Container(
+          width: 72, height: 72,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00FF66).withValues(alpha: glowAlpha),
-                blurRadius: 12 + _glowPulseController.value * 6,
-                spreadRadius: 0,
-              ),
-            ],
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: obscure,
-            keyboardType: keyboardType,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.9),
-              fontSize: 14,
-              fontWeight: FontWeight.w300,
+            borderRadius: BorderRadius.circular(22),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                const Color(0xFF6366F1).withOpacity(0.2),
+                const Color(0xFFEC4899).withOpacity(0.12),
+              ],
             ),
-            cursorColor: const Color(0xFF00FF66),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: TextStyle(
-                color: Colors.white.withValues(alpha: 0.2),
-                fontSize: 13,
-                fontWeight: FontWeight.w300,
-              ),
-              prefixIcon: Icon(
-                icon,
-                color: const Color(0xFF00CC66).withValues(alpha: 0.5),
-                size: 20,
-              ),
-              suffixIcon: suffixIcon,
-              filled: true,
-              fillColor: const Color(0xFF0A1A0E).withValues(alpha: 0.9),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.2),
-                  width: 1,
-                ),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.6),
-                  width: 1.5,
-                ),
-              ),
-            ),
+            border: Border.all(
+              color: const Color(0xFF6366F1).withOpacity(0.3), width: 1),
+            boxShadow: [BoxShadow(
+              color: const Color(0xFF6366F1).withOpacity(glow),
+              blurRadius: 20, spreadRadius: 4,
+            )],
           ),
+          child: const Icon(Icons.person_outline_rounded,
+              color: Color(0xFF818CF8), size: 30),
         );
       },
     );
   }
+}
 
-  Widget _buildLoginButton() {
-    return AnimatedBuilder(
-      animation: _glowPulseController,
-      builder: (context, child) {
-        final glowIntensity = 0.3 + _glowPulseController.value * 0.2;
-        return Container(
+class _FieldLabel extends StatelessWidget {
+  final String label;
+  const _FieldLabel({required this.label});
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'Outfit',
+          fontSize: 10,
+          letterSpacing: 0.9,
+          color: Colors.white.withOpacity(0.35),
+        ),
+      ),
+    );
+  }
+}
+
+class _StyledField extends StatelessWidget {
+  final TextEditingController controller;
+  final String hint;
+  final IconData icon;
+  final bool obscure;
+  final TextInputType? keyboardType;
+  final Widget? suffix;
+
+  const _StyledField({
+    required this.controller,
+    required this.hint,
+    required this.icon,
+    this.obscure = false,
+    this.keyboardType,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      style: const TextStyle(
+        fontFamily: 'Outfit',
+        fontSize: 14,
+        color: Color(0xFFF8FAFC),
+      ),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: TextStyle(
+          fontFamily: 'Outfit',
+          fontSize: 14,
+          color: Colors.white.withOpacity(0.28),
+        ),
+        prefixIcon: Icon(icon,
+            size: 18, color: Colors.white.withOpacity(0.3)),
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.04),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16, vertical: 14),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(
+              color: Colors.white.withOpacity(0.09), width: 1),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(
+              color: Color(0xFF6366F1), width: 1.2),
+        ),
+      ),
+    );
+  }
+}
+
+class _GradientButton extends StatefulWidget {
+  final String label;
+  final bool isLoading;
+  final List<Color> colors;
+  final VoidCallback onTap;
+  const _GradientButton({
+    required this.label,
+    required this.isLoading,
+    required this.colors,
+    required this.onTap,
+  });
+  @override
+  State<_GradientButton> createState() => _GradientButtonState();
+}
+
+class _GradientButtonState extends State<_GradientButton> {
+  bool _pressed = false;
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 100),
+        child: Container(
           width: double.infinity,
           height: 52,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(15),
+            gradient: LinearGradient(
+              colors: widget.colors,
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+            ),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00FF66).withValues(alpha: glowIntensity),
-                blurRadius: 18 + _glowPulseController.value * 10,
-                spreadRadius: 0,
-                offset: const Offset(0, 2),
-              ),
-              BoxShadow(
-                color:
-                    const Color(0xFF00CC44).withValues(alpha: glowIntensity * 0.5),
-                blurRadius: 30,
-                spreadRadius: 0,
-                offset: const Offset(0, 4),
+                color: widget.colors.first.withOpacity(0.35),
+                blurRadius: 20, offset: const Offset(0, 6),
               ),
             ],
           ),
-          child: ElevatedButton(
-            onPressed: () {
-              // Handle login
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0D2A14),
-              foregroundColor: const Color(0xFF00FF66),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-                side: BorderSide(
-                  color: const Color(0xFF00FF66).withValues(alpha: 0.4),
-                  width: 1,
-                ),
-              ),
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-            child: const Text(
-              'Login',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 2,
-              ),
+          child: Center(
+            child: widget.isLoading
+                ? const SizedBox(
+                    width: 20, height: 20,
+                    child: CircularProgressIndicator(
+                      color: Colors.white, strokeWidth: 2))
+                : Text(
+                    widget.label.toUpperCase(),
+                    style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SocialButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _SocialButton({required this.label, required this.icon});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Colors.white.withOpacity(0.04),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 18, color: Colors.white.withOpacity(0.5)),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: 'Outfit',
+              fontSize: 12,
+              color: Colors.white.withOpacity(0.5),
             ),
           ),
-        );
-      },
-    );
-  }
-}
-
-// Background glow for login page
-class _LoginBackgroundPainter extends CustomPainter {
-  final double pulse;
-
-  _LoginBackgroundPainter({required this.pulse});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Top center glow (behind orb area)
-    final topCenter = Offset(size.width / 2, size.height * 0.28);
-    final topPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF003311).withValues(alpha: 0.35 + pulse * 0.1),
-          const Color(0xFF001A08).withValues(alpha: 0.15 + pulse * 0.05),
-          Colors.transparent,
         ],
-        stops: const [0.0, 0.35, 1.0],
-      ).createShader(
-        Rect.fromCenter(
-          center: topCenter,
-          width: size.width * 1.4,
-          height: size.height * 0.8,
-        ),
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      topPaint,
-    );
-
-    // Subtle bottom edge glow near the button
-    final bottomCenter = Offset(size.width / 2, size.height * 0.78);
-    final bottomPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF002211).withValues(alpha: 0.15 + pulse * 0.05),
-          Colors.transparent,
-        ],
-      ).createShader(
-        Rect.fromCenter(
-          center: bottomCenter,
-          width: size.width,
-          height: size.height * 0.3,
-        ),
-      );
-    canvas.drawRect(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      bottomPaint,
+      ),
     );
   }
-
-  @override
-  bool shouldRepaint(covariant _LoginBackgroundPainter oldDelegate) =>
-      oldDelegate.pulse != pulse;
-}
-
-// Floating particles for login
-class _LoginParticlesPainter extends CustomPainter {
-  final double time;
-  final double glow;
-
-  _LoginParticlesPainter({required this.time, required this.glow});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final random = Random(99);
-    for (int i = 0; i < 20; i++) {
-      final baseX = random.nextDouble();
-      final baseY = random.nextDouble();
-      final speed = 0.2 + random.nextDouble() * 0.5;
-      final phase = random.nextDouble() * 2 * pi;
-      final pSize = 0.4 + random.nextDouble() * 1.5;
-
-      final x =
-          (baseX + sin(time * 2 * pi * speed + phase) * 0.02) * size.width;
-      final y = ((baseY + time * speed * 0.08) % 1.0) * size.height;
-      final alpha = (0.1 + glow * 0.1) * (1.0 - (y / size.height) * 0.4);
-
-      final paint = Paint()
-        ..color =
-            const Color(0xFF00FF88).withValues(alpha: alpha.clamp(0.0, 1.0));
-      canvas.drawCircle(Offset(x, y), pSize, paint);
-
-      final glowPaint = Paint()
-        ..color = const Color(0xFF00FF66)
-            .withValues(alpha: (alpha * 0.25).clamp(0.0, 1.0))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-      canvas.drawCircle(Offset(x, y), pSize * 2, glowPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _LoginParticlesPainter oldDelegate) => true;
-}
-
-// Mini orb painter (smaller version of the loading screen orb)
-class _MiniOrbPainter extends CustomPainter {
-  final double rotation;
-  final double glow;
-
-  _MiniOrbPainter({required this.rotation, required this.glow});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final maxRadius = size.width / 2 * 0.8;
-
-    for (int layer = 0; layer < 2; layer++) {
-      for (int i = 0; i < 4; i++) {
-        final paint = Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeCap = StrokeCap.round;
-
-        final layerAlpha = [0.6, 0.25][layer];
-        final layerWidth = [1.8, 4.5][layer];
-        final blur = [0.0, 5.0][layer];
-
-        final hue = 130.0 + i * 22.0 - 35.0;
-        paint.color = HSLColor.fromAHSL(
-          (layerAlpha + glow * 0.12).clamp(0.0, 1.0),
-          hue.clamp(85.0, 165.0),
-          (0.75 + glow * 0.25).clamp(0.0, 1.0),
-          (0.4 + glow * 0.12 + layer * -0.05).clamp(0.0, 1.0),
-        ).toColor();
-        paint.strokeWidth = layerWidth + glow * 0.6;
-
-        if (blur > 0) {
-          paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
-        }
-
-        final path = Path();
-        final angleOffset = i * (2 * pi / 4);
-        final timeShift = rotation * 2 * pi;
-
-        final points = <Offset>[];
-        for (double t = 0; t <= 1.0; t += 0.02) {
-          final baseAngle = angleOffset + t * 2.5 * pi + timeShift;
-          final r1 = sin(t * pi) * 0.85;
-          final r2 = sin(t * 4.5 + timeShift * 1.3 + i) * 0.12;
-          final radiusFactor = (r1 + r2).clamp(0.0, 1.0);
-          final radius = maxRadius * (0.15 + 0.85 * radiusFactor);
-
-          final displacement =
-              sin(t * 6 + timeShift * 2.0 + i * 1.3) * 6 * sin(t * pi);
-          final x = center.dx +
-              cos(baseAngle) * radius +
-              cos(baseAngle + pi / 2) * displacement;
-          final y = center.dy +
-              sin(baseAngle) * radius +
-              sin(baseAngle + pi / 2) * displacement;
-          points.add(Offset(x, y));
-        }
-
-        if (points.length < 3) continue;
-
-        path.moveTo(points[0].dx, points[0].dy);
-        for (int j = 1; j < points.length - 1; j++) {
-          final midX = (points[j].dx + points[j + 1].dx) / 2;
-          final midY = (points[j].dy + points[j + 1].dy) / 2;
-          path.quadraticBezierTo(points[j].dx, points[j].dy, midX, midY);
-        }
-        canvas.drawPath(path, paint);
-      }
-    }
-
-    // Accent dots
-    final random = Random(13);
-    for (int i = 0; i < 10; i++) {
-      final angle =
-          (i * pi / 5) + (rotation * 2 * pi * 0.6) + random.nextDouble();
-      final radiusFactor =
-          0.2 + 0.5 * sin(i * 0.8 + rotation * 4 * pi).abs();
-      final r = maxRadius * radiusFactor;
-      final x = center.dx + cos(angle) * r;
-      final y = center.dy + sin(angle) * r;
-
-      final dotPaint = Paint()
-        ..color = Color.lerp(
-          const Color(0xFF00FF66),
-          const Color(0xFF88FFCC),
-          glow,
-        )!.withValues(alpha: (0.5 + glow * 0.4).clamp(0.0, 1.0));
-      canvas.drawCircle(Offset(x, y), 1.0 + glow * 0.6, dotPaint);
-
-      final haloPaint = Paint()
-        ..color = const Color(0xFF00FF66).withValues(alpha: 0.15)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-      canvas.drawCircle(Offset(x, y), 3 + glow, haloPaint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _MiniOrbPainter oldDelegate) => true;
 }

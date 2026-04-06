@@ -1,19 +1,28 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
-import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with TickerProviderStateMixin {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _agreedToTerms = false;
+  int _selectedProfileType = -1; // -1 = none selected
+
+  final List<_ProfileTypeOption> _profileTypes = [
+    _ProfileTypeOption('Solo', Icons.person_outline_rounded),
+    _ProfileTypeOption('Family', Icons.family_restroom_rounded),
+    _ProfileTypeOption('Group', Icons.groups_outlined),
+    _ProfileTypeOption('Business', Icons.business_center_outlined),
+  ];
 
   late AnimationController _orbRotationController;
   late AnimationController _glowPulseController;
@@ -72,6 +81,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _orbRotationController.dispose();
@@ -93,7 +103,7 @@ class _LoginScreenState extends State<LoginScreen>
             builder: (context, child) {
               return Positioned.fill(
                 child: CustomPaint(
-                  painter: _LoginBackgroundPainter(
+                  painter: _RegisterBackgroundPainter(
                     pulse: _glowPulseController.value,
                   ),
                 ),
@@ -107,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen>
             builder: (context, child) {
               return Positioned.fill(
                 child: CustomPaint(
-                  painter: _LoginParticlesPainter(
+                  painter: _RegisterParticlesPainter(
                     time: _particleController.value,
                     glow: _glowPulseController.value,
                   ),
@@ -130,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const SizedBox(height: 50),
+                    const SizedBox(height: 40),
 
                     // "EXPENSES" app title
                     AnimatedBuilder(
@@ -167,29 +177,33 @@ class _LoginScreenState extends State<LoginScreen>
                       },
                     ),
 
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 14),
 
-                    // "LOGIN" subtitle
+                    // "CREATE YOUR OWN ACCOUNT" subtitle
                     AnimatedBuilder(
                       animation: _fadeInController,
                       builder: (context, child) {
                         return Opacity(
                           opacity: _titleFade.value,
-                          child: Text(
-                            'LOGIN',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 6,
-                              color: const Color(0xFF00FF66)
-                                  .withValues(alpha: 0.8),
-                            ),
+                          child: Column(
+                            children: [
+                              Text(
+                                'CREATE YOUR OWN ACCOUNT',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 3,
+                                  color: const Color(0xFF00FF66)
+                                      .withValues(alpha: 0.8),
+                                ),
+                              ),
+                            ],
                           ),
                         );
                       },
                     ),
 
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 18),
 
                     // Small rotating orb
                     AnimatedBuilder(
@@ -202,15 +216,15 @@ class _LoginScreenState extends State<LoginScreen>
                         return Opacity(
                           opacity: _orbFade.value,
                           child: SizedBox(
-                            width: 90,
-                            height: 90,
+                            width: 80,
+                            height: 80,
                             child: Stack(
                               alignment: Alignment.center,
                               children: [
                                 // Glow behind orb
                                 Container(
-                                  width: 70,
-                                  height: 70,
+                                  width: 60,
+                                  height: 60,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     boxShadow: [
@@ -233,7 +247,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   angle:
                                       _orbRotationController.value * 2 * pi,
                                   child: CustomPaint(
-                                    size: const Size(90, 90),
+                                    size: const Size(80, 80),
                                     painter: _MiniOrbPainter(
                                       rotation:
                                           _orbRotationController.value,
@@ -243,8 +257,8 @@ class _LoginScreenState extends State<LoginScreen>
                                 ),
                                 // Core dot
                                 Container(
-                                  width: 6,
-                                  height: 6,
+                                  width: 5,
+                                  height: 5,
                                   decoration: BoxDecoration(
                                     shape: BoxShape.circle,
                                     color: Colors.white.withValues(alpha: 0.9),
@@ -265,7 +279,7 @@ class _LoginScreenState extends State<LoginScreen>
                       },
                     ),
 
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 28),
 
                     // Form fields with slide-in animation
                     AnimatedBuilder(
@@ -282,6 +296,17 @@ class _LoginScreenState extends State<LoginScreen>
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Full Name field
+                          _buildFieldLabel('Full Name'),
+                          const SizedBox(height: 8),
+                          _buildGlowingTextField(
+                            controller: _nameController,
+                            hint: 'Enter your full name',
+                            icon: Icons.person_outline_rounded,
+                          ),
+
+                          const SizedBox(height: 18),
+
                           // Email field
                           _buildFieldLabel('Email Address'),
                           const SizedBox(height: 8),
@@ -292,14 +317,14 @@ class _LoginScreenState extends State<LoginScreen>
                             keyboardType: TextInputType.emailAddress,
                           ),
 
-                          const SizedBox(height: 22),
+                          const SizedBox(height: 18),
 
                           // Password field
                           _buildFieldLabel('Password'),
                           const SizedBox(height: 8),
                           _buildGlowingTextField(
                             controller: _passwordController,
-                            hint: 'Enter your password',
+                            hint: 'Create a password',
                             icon: Icons.lock_outline_rounded,
                             obscure: _obscurePassword,
                             suffixIcon: IconButton(
@@ -319,57 +344,34 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
 
+                          const SizedBox(height: 24),
+
+                          // Profile type selection
+                          _buildFieldLabel('Select Your Profile Type'),
                           const SizedBox(height: 12),
+                          _buildProfileTypeSelector(),
 
-                          // Forgot password
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: GestureDetector(
-                              onTap: () {},
-                              child: Text(
-                                'Forgot Password?',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: const Color(0xFF00FF66)
-                                      .withValues(alpha: 0.6),
-                                  fontWeight: FontWeight.w400,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ),
-                          ),
+                          const SizedBox(height: 24),
 
-                          const SizedBox(height: 32),
-
-                          // Login button
-                          _buildLoginButton(),
+                          // Terms checkbox
+                          _buildTermsCheckbox(),
 
                           const SizedBox(height: 28),
 
-                          // Register link
+                          // Register button
+                          _buildRegisterButton(),
+
+                          const SizedBox(height: 24),
+
+                          // Login link
                           Center(
                             child: GestureDetector(
                               onTap: () {
-                                Navigator.push(
-                                  context,
-                                  PageRouteBuilder(
-                                    pageBuilder: (context, animation, secondaryAnimation) =>
-                                        const RegisterScreen(),
-                                    transitionsBuilder:
-                                        (context, animation, secondaryAnimation, child) {
-                                      return FadeTransition(
-                                        opacity: animation,
-                                        child: child,
-                                      );
-                                    },
-                                    transitionDuration:
-                                        const Duration(milliseconds: 500),
-                                  ),
-                                );
+                                Navigator.pop(context);
                               },
                               child: RichText(
                                 text: TextSpan(
-                                  text: 'Do not have an Account? ',
+                                  text: 'Already have an Account? ',
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: Colors.white
@@ -378,7 +380,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                   children: [
                                     TextSpan(
-                                      text: 'Register',
+                                      text: 'Login',
                                       style: TextStyle(
                                         color: const Color(0xFF00FF66)
                                             .withValues(alpha: 0.9),
@@ -493,7 +495,190 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginButton() {
+  Widget _buildProfileTypeSelector() {
+    return AnimatedBuilder(
+      animation: _glowPulseController,
+      builder: (context, child) {
+        return Row(
+          children: List.generate(_profileTypes.length, (index) {
+            final isSelected = _selectedProfileType == index;
+            final type = _profileTypes[index];
+            final pulseVal = _glowPulseController.value;
+
+            return Expanded(
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedProfileType = index;
+                  });
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOutCubic,
+                  margin: EdgeInsets.only(
+                    right: index < _profileTypes.length - 1 ? 8 : 0,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: isSelected
+                        ? const Color(0xFF0D2A14).withValues(alpha: 0.95)
+                        : const Color(0xFF0A1A0E).withValues(alpha: 0.8),
+                    border: Border.all(
+                      color: isSelected
+                          ? const Color(0xFF00FF66)
+                              .withValues(alpha: 0.6 + pulseVal * 0.2)
+                          : const Color(0xFF00FF66).withValues(alpha: 0.12),
+                      width: isSelected ? 1.5 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: const Color(0xFF00FF66)
+                                  .withValues(alpha: 0.2 + pulseVal * 0.1),
+                              blurRadius: 14 + pulseVal * 6,
+                              spreadRadius: 0,
+                            ),
+                          ]
+                        : [],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        type.icon,
+                        size: 22,
+                        color: isSelected
+                            ? const Color(0xFF00FF66)
+                                .withValues(alpha: 0.9)
+                            : Colors.white.withValues(alpha: 0.3),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        type.label,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.w400,
+                          color: isSelected
+                              ? const Color(0xFF00FF66)
+                                  .withValues(alpha: 0.9)
+                              : Colors.white.withValues(alpha: 0.35),
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        );
+      },
+    );
+  }
+
+  Widget _buildTermsCheckbox() {
+    return AnimatedBuilder(
+      animation: _glowPulseController,
+      builder: (context, child) {
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _agreedToTerms = !_agreedToTerms;
+            });
+          },
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Custom glowing checkbox
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                width: 20,
+                height: 20,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(5),
+                  color: _agreedToTerms
+                      ? const Color(0xFF0D2A14)
+                      : const Color(0xFF0A1A0E).withValues(alpha: 0.9),
+                  border: Border.all(
+                    color: _agreedToTerms
+                        ? const Color(0xFF00FF66).withValues(alpha: 0.7)
+                        : const Color(0xFF00FF66).withValues(alpha: 0.2),
+                    width: 1.5,
+                  ),
+                  boxShadow: _agreedToTerms
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF00FF66).withValues(
+                                alpha:
+                                    0.25 + _glowPulseController.value * 0.1),
+                            blurRadius:
+                                10 + _glowPulseController.value * 4,
+                            spreadRadius: 0,
+                          ),
+                        ]
+                      : [],
+                ),
+                child: _agreedToTerms
+                    ? const Icon(
+                        Icons.check_rounded,
+                        size: 14,
+                        color: Color(0xFF00FF66),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    text: 'Agreement of ',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontWeight: FontWeight.w300,
+                    ),
+                    children: [
+                      TextSpan(
+                        text: 'services',
+                        style: TextStyle(
+                          color: const Color(0xFF00FF66)
+                              .withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.underline,
+                          decorationColor: const Color(0xFF00FF66)
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
+                      TextSpan(
+                        text: ' & ',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      TextSpan(
+                        text: 'conditions',
+                        style: TextStyle(
+                          color: const Color(0xFF00FF66)
+                              .withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.underline,
+                          decorationColor: const Color(0xFF00FF66)
+                              .withValues(alpha: 0.3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildRegisterButton() {
     return AnimatedBuilder(
       animation: _glowPulseController,
       builder: (context, child) {
@@ -505,14 +690,15 @@ class _LoginScreenState extends State<LoginScreen>
             borderRadius: BorderRadius.circular(14),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00FF66).withValues(alpha: glowIntensity),
+                color:
+                    const Color(0xFF00FF66).withValues(alpha: glowIntensity),
                 blurRadius: 18 + _glowPulseController.value * 10,
                 spreadRadius: 0,
                 offset: const Offset(0, 2),
               ),
               BoxShadow(
-                color:
-                    const Color(0xFF00CC44).withValues(alpha: glowIntensity * 0.5),
+                color: const Color(0xFF00CC44)
+                    .withValues(alpha: glowIntensity * 0.5),
                 blurRadius: 30,
                 spreadRadius: 0,
                 offset: const Offset(0, 4),
@@ -521,7 +707,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           child: ElevatedButton(
             onPressed: () {
-              // Handle login
+              // Handle registration
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0D2A14),
@@ -537,7 +723,7 @@ class _LoginScreenState extends State<LoginScreen>
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: const Text(
-              'Login',
+              'Register',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -551,16 +737,23 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// Background glow for login page
-class _LoginBackgroundPainter extends CustomPainter {
+class _ProfileTypeOption {
+  final String label;
+  final IconData icon;
+
+  _ProfileTypeOption(this.label, this.icon);
+}
+
+// Background glow for register page
+class _RegisterBackgroundPainter extends CustomPainter {
   final double pulse;
 
-  _LoginBackgroundPainter({required this.pulse});
+  _RegisterBackgroundPainter({required this.pulse});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Top center glow (behind orb area)
-    final topCenter = Offset(size.width / 2, size.height * 0.28);
+    // Top center glow
+    final topCenter = Offset(size.width / 2, size.height * 0.2);
     final topPaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -573,7 +766,7 @@ class _LoginBackgroundPainter extends CustomPainter {
         Rect.fromCenter(
           center: topCenter,
           width: size.width * 1.4,
-          height: size.height * 0.8,
+          height: size.height * 0.7,
         ),
       );
     canvas.drawRect(
@@ -581,8 +774,28 @@ class _LoginBackgroundPainter extends CustomPainter {
       topPaint,
     );
 
-    // Subtle bottom edge glow near the button
-    final bottomCenter = Offset(size.width / 2, size.height * 0.78);
+    // Mid glow near profile types
+    final midCenter = Offset(size.width / 2, size.height * 0.6);
+    final midPaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          const Color(0xFF002211).withValues(alpha: 0.1 + pulse * 0.04),
+          Colors.transparent,
+        ],
+      ).createShader(
+        Rect.fromCenter(
+          center: midCenter,
+          width: size.width * 1.0,
+          height: size.height * 0.3,
+        ),
+      );
+    canvas.drawRect(
+      Rect.fromLTWH(0, 0, size.width, size.height),
+      midPaint,
+    );
+
+    // Bottom edge glow near the button
+    final bottomCenter = Offset(size.width / 2, size.height * 0.85);
     final bottomPaint = Paint()
       ..shader = RadialGradient(
         colors: [
@@ -603,21 +816,21 @@ class _LoginBackgroundPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LoginBackgroundPainter oldDelegate) =>
+  bool shouldRepaint(covariant _RegisterBackgroundPainter oldDelegate) =>
       oldDelegate.pulse != pulse;
 }
 
-// Floating particles for login
-class _LoginParticlesPainter extends CustomPainter {
+// Floating particles for register screen
+class _RegisterParticlesPainter extends CustomPainter {
   final double time;
   final double glow;
 
-  _LoginParticlesPainter({required this.time, required this.glow});
+  _RegisterParticlesPainter({required this.time, required this.glow});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final random = Random(99);
-    for (int i = 0; i < 20; i++) {
+    final random = Random(77);
+    for (int i = 0; i < 18; i++) {
       final baseX = random.nextDouble();
       final baseY = random.nextDouble();
       final speed = 0.2 + random.nextDouble() * 0.5;
@@ -643,10 +856,10 @@ class _LoginParticlesPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _LoginParticlesPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _RegisterParticlesPainter oldDelegate) => true;
 }
 
-// Mini orb painter (smaller version of the loading screen orb)
+// Mini orb painter (same as login screen)
 class _MiniOrbPainter extends CustomPainter {
   final double rotation;
   final double glow;

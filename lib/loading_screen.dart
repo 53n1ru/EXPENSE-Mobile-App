@@ -74,8 +74,8 @@ class _LoadingScreenState extends State<LoadingScreen>
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (_, __, ___) => widget.nextScreen,
-            transitionsBuilder: (_, anim, __, child) =>
+            pageBuilder: (_, _, _) => widget.nextScreen,
+            transitionsBuilder: (_, anim, _, child) =>
                 FadeTransition(opacity: anim, child: child),
             transitionDuration: const Duration(milliseconds: 600),
           ),
@@ -102,7 +102,7 @@ class _LoadingScreenState extends State<LoadingScreen>
           // ── Ambient orbs ──────────────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
-            builder: (_, __) {
+            builder: (_, _) {
               final t = _orbController.value;
               return Stack(children: [
                 _Orb(
@@ -231,7 +231,7 @@ class _LoadingScreenState extends State<LoadingScreen>
                     // Progress section
                     AnimatedBuilder(
                       animation: _progressController,
-                      builder: (_, __) {
+                      builder: (_, _) {
                         final pct =
                             (_progressController.value * 100).round();
                         return Column(
@@ -384,7 +384,7 @@ class _DotIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: controller,
-      builder: (_, __) {
+      builder: (_, _) {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (i) {

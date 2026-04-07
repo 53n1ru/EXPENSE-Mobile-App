@@ -136,7 +136,7 @@ class _RegisterPageState extends State<RegisterPage>
           // ── Orbs ──────────────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
-            builder: (_, __) {
+            builder: (_, _) {
               final t = _orbController.value;
               final w = MediaQuery.of(context).size.width;
               final h = MediaQuery.of(context).size.height;

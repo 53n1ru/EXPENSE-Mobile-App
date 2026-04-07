@@ -28,6 +28,30 @@ class UserService {
     return doc.exists ? doc.data() : null;
   }
 
+  // Add these two methods to UserService class
+
+static Future<void> updateBudget({
+  required String userId,
+  required double budget,
+}) async {
+  await _db.collection('users').doc(userId).update({
+    'budget': budget,
+  });
+}
+
+static Future<double> getBudget(String userId) async {
+  try {
+    final doc = await _db.collection('users').doc(userId).get();
+    if (doc.exists) {
+      final data = doc.data();
+      return (data?['budget'] as num?)?.toDouble() ?? 150000.0;
+    }
+    return 150000.0; // default budget
+  } catch (e) {
+    return 150000.0;
+  }
+}
+
   // ── Update name ────────────────────────────────────────
   static Future<void> updateName({
     required String userId,

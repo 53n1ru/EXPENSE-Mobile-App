@@ -126,7 +126,7 @@ class _LoginPageState extends State<LoginPage>
           // ── Animated orbs ──────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
-            builder: (_, __) {
+            builder: (_, _) {
               final t = _orbController.value;
               return Stack(children: [
                 _Orb(x: -70 + 30 * t, y: -90 + 40 * t,

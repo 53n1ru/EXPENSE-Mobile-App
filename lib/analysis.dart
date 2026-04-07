@@ -24,7 +24,6 @@ class _AnalysisPageState extends State<AnalysisPage>
     'This Month', '3 Months', '6 Months', 'Year'
   ];
 
-  // Replace with real data from your model/provider
   final List<Map<String, dynamic>> _categories = [
     {'name': 'Food',        'amount': 18400, 'color': Color(0xFFEC4899), 'icon': Icons.restaurant_outlined,       'pct': 0.82},
     {'name': 'Electricity', 'amount': 12800, 'color': Color(0xFF6366F1), 'icon': Icons.bolt_outlined,             'pct': 0.58},
@@ -74,7 +73,7 @@ class _AnalysisPageState extends State<AnalysisPage>
         children: [
           AnimatedBuilder(
             animation: _orbController,
-            builder: (_, _) {
+            builder: (_, __) {
               final t = _orbController.value;
               final w = MediaQuery.of(context).size.width;
               final h = MediaQuery.of(context).size.height;
@@ -99,47 +98,27 @@ class _AnalysisPageState extends State<AnalysisPage>
               ),
               child: Column(
                 children: [
-                  // Top bar
+                  // ── Top bar ───────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Stack(
-                      alignment: Alignment.center,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Container(
-                              width: 36, height: 36,
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.05),
-                                borderRadius: BorderRadius.circular(11),
-                                border: Border.all(
-                                    color: Colors.white.withOpacity(0.08)),
-                              ),
-                              child: const Icon(
-                                  Icons.chevron_left_rounded,
-                                  color: Colors.white54, size: 20),
-                            ),
-                          ),
-                        ),
-                        Column(mainAxisSize: MainAxisSize.min, children: [
-                          Text('EXPENSES',
-                              style: TextStyle(
-                                fontFamily: 'SpaceMono',
-                                fontSize: 8,
-                                letterSpacing: 2.5,
-                                color: _indigo.withOpacity(0.6),
-                              )),
-                          const Text('Analysis',
-                              style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -0.3,
-                                color: Color(0xFFF8FAFC),
-                              )),
-                        ]),
+                        Text('EXPENSES',
+                            style: TextStyle(
+                              fontFamily: 'SpaceMono',
+                              fontSize: 8,
+                              letterSpacing: 2.5,
+                              color: _indigo.withOpacity(0.6),
+                            )),
+                        const Text('Analysis',
+                            style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              color: Color(0xFFF8FAFC),
+                            )),
                       ],
                     ),
                   ),
@@ -161,20 +140,16 @@ class _AnalysisPageState extends State<AnalysisPage>
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 8),
                                   child: GestureDetector(
-                                    onTap: () =>
-                                        setState(() => _period = p),
+                                    onTap: () => setState(() => _period = p),
                                     child: AnimatedContainer(
-                                      duration: const Duration(
-                                          milliseconds: 200),
-                                      padding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 14, vertical: 6),
+                                      duration: const Duration(milliseconds: 200),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 6),
                                       decoration: BoxDecoration(
                                         color: active
                                             ? _indigo.withOpacity(0.18)
                                             : Colors.white.withOpacity(0.04),
-                                        borderRadius:
-                                            BorderRadius.circular(20),
+                                        borderRadius: BorderRadius.circular(20),
                                         border: Border.all(
                                           color: active
                                               ? _indigo.withOpacity(0.45)
@@ -224,15 +199,13 @@ class _AnalysisPageState extends State<AnalysisPage>
                                 label: 'Transactions',
                                 value: '24',
                                 sub: 'This month',
-                                subColor:
-                                    Colors.white.withOpacity(0.3),
+                                subColor: Colors.white.withOpacity(0.3),
                               ),
                               _SummaryCard(
                                 label: 'Avg / Day',
                                 value: 'Rs. 2,000',
                                 sub: '14 days active',
-                                subColor:
-                                    Colors.white.withOpacity(0.3),
+                                subColor: Colors.white.withOpacity(0.3),
                               ),
                             ],
                           ),
@@ -246,43 +219,36 @@ class _AnalysisPageState extends State<AnalysisPage>
                               children: [
                                 Row(
                                   children: [
-                                    // Bar chart
                                     Expanded(
                                       child: SizedBox(
                                         height: 100,
                                         child: CustomPaint(
-                                          painter: _BarChartPainter(
-                                              _categories),
+                                          painter: _BarChartPainter(_categories),
                                         ),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
-                                    // Donut chart
                                     SizedBox(
                                       width: 90,
                                       height: 100,
                                       child: CustomPaint(
-                                        painter: _DonutPainter(
-                                            _categories),
+                                        painter: _DonutPainter(_categories),
                                       ),
                                     ),
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                // Legend
                                 Wrap(
                                   spacing: 12,
                                   runSpacing: 6,
                                   children: _categories
                                       .map((c) => Row(
-                                            mainAxisSize:
-                                                MainAxisSize.min,
+                                            mainAxisSize: MainAxisSize.min,
                                             children: [
                                               Container(
                                                 width: 8, height: 8,
                                                 decoration: BoxDecoration(
-                                                  color: c['color']
-                                                      as Color,
+                                                  color: c['color'] as Color,
                                                   shape: BoxShape.circle,
                                                 ),
                                               ),
@@ -292,8 +258,7 @@ class _AnalysisPageState extends State<AnalysisPage>
                                                 style: TextStyle(
                                                   fontFamily: 'Outfit',
                                                   fontSize: 10,
-                                                  color: Colors.white
-                                                      .withOpacity(0.45),
+                                                  color: Colors.white.withOpacity(0.45),
                                                 ),
                                               ),
                                             ],
@@ -301,16 +266,13 @@ class _AnalysisPageState extends State<AnalysisPage>
                                       .toList(),
                                 ),
                                 const SizedBox(height: 14),
-                                // Action buttons
                                 Row(children: [
                                   Expanded(
                                     child: _ActionButton(
                                       label: 'Download PDF',
                                       icon: Icons.picture_as_pdf_outlined,
                                       color: const Color(0xFFF09595),
-                                      onTap: () {
-                                        // 👉 PDF export logic
-                                      },
+                                      onTap: () {},
                                     ),
                                   ),
                                   const SizedBox(width: 8),
@@ -319,9 +281,7 @@ class _AnalysisPageState extends State<AnalysisPage>
                                       label: 'Export CSV',
                                       icon: Icons.table_chart_outlined,
                                       color: const Color(0xFF5DCAA5),
-                                      onTap: () {
-                                        // 👉 CSV export logic
-                                      },
+                                      onTap: () {},
                                     ),
                                   ),
                                 ]),
@@ -366,8 +326,7 @@ class _AnalysisPageState extends State<AnalysisPage>
                       ),
                     ),
                   ),
-
-                  const _BottomNav(activeIndex: 3),
+                  // ── NO BottomNav here — handled by MainShell ──
                 ],
               ),
             ),
@@ -419,8 +378,7 @@ class _SummaryCard extends StatelessWidget {
                 fontFamily: 'Outfit',
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color:
-                    valueColor ?? const Color(0xFFF8FAFC),
+                color: valueColor ?? const Color(0xFFF8FAFC),
               )),
           const SizedBox(height: 2),
           Text(sub,
@@ -473,8 +431,7 @@ class _Card extends StatelessWidget {
 class _TopSpendingItem extends StatelessWidget {
   final int rank;
   final Map<String, dynamic> category;
-  const _TopSpendingItem(
-      {required this.rank, required this.category});
+  const _TopSpendingItem({required this.rank, required this.category});
 
   @override
   Widget build(BuildContext context) {
@@ -499,8 +456,7 @@ class _TopSpendingItem extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: color.withOpacity(0.22)),
             ),
-            child: Icon(category['icon'] as IconData,
-                size: 16, color: color),
+            child: Icon(category['icon'] as IconData, size: 16, color: color),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -520,10 +476,8 @@ class _TopSpendingItem extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: category['pct'] as double,
                     minHeight: 4,
-                    backgroundColor:
-                        Colors.white.withOpacity(0.07),
-                    valueColor:
-                        AlwaysStoppedAnimation<Color>(color),
+                    backgroundColor: Colors.white.withOpacity(0.07),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
                   ),
                 ),
               ],
@@ -609,8 +563,7 @@ class _BarChartPainter extends CustomPainter {
         .map((c) => c['amount'] as int)
         .reduce(max)
         .toDouble();
-    final barW = (size.width - (categories.length - 1) * 6) /
-        categories.length;
+    final barW = (size.width - (categories.length - 1) * 6) / categories.length;
 
     for (int i = 0; i < categories.length; i++) {
       final pct = (categories[i]['amount'] as int) / maxAmt;
@@ -622,21 +575,21 @@ class _BarChartPainter extends CustomPainter {
         ..color = (categories[i]['color'] as Color).withOpacity(0.85)
         ..style = PaintingStyle.fill;
 
-      final rrect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(x, y, barW, barH),
-        const Radius.circular(4),
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barW, barH),
+          const Radius.circular(4),
+        ),
+        paint,
       );
-      canvas.drawRRect(rrect, paint);
     }
 
-    // Baseline
-    final line = Paint()
-      ..color = Colors.white.withOpacity(0.08)
-      ..strokeWidth = 0.8;
     canvas.drawLine(
       Offset(0, size.height - 16),
       Offset(size.width, size.height - 16),
-      line,
+      Paint()
+        ..color = Colors.white.withOpacity(0.08)
+        ..strokeWidth = 0.8,
     );
   }
 
@@ -660,29 +613,24 @@ class _DonutPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = min(size.width, size.height) / 2 - 8;
     const strokeW = 14.0;
-
     double startAngle = -pi / 2;
 
     for (final cat in categories) {
-      final sweep =
-          2 * pi * (cat['amount'] as int) / total;
-      final paint = Paint()
-        ..color = cat['color'] as Color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeW
-        ..strokeCap = StrokeCap.round;
-
+      final sweep = 2 * pi * (cat['amount'] as int) / total;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         startAngle,
         sweep - 0.08,
         false,
-        paint,
+        Paint()
+          ..color = cat['color'] as Color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeW
+          ..strokeCap = StrokeCap.round,
       );
       startAngle += sweep;
     }
 
-    // Center text
     final tp = TextPainter(
       text: const TextSpan(
         text: '60k',
@@ -695,10 +643,7 @@ class _DonutPainter extends CustomPainter {
       ),
       textDirection: TextDirection.ltr,
     )..layout();
-    tp.paint(
-      canvas,
-      center - Offset(tp.width / 2, tp.height / 2),
-    );
+    tp.paint(canvas, center - Offset(tp.width / 2, tp.height / 2));
   }
 
   @override
@@ -747,10 +692,7 @@ class _LineTrendPainter extends CustomPainter {
         ..shader = LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            color.withOpacity(0.3),
-            color.withOpacity(0.0),
-          ],
+          colors: [color.withOpacity(0.3), color.withOpacity(0.0)],
         ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)),
     );
 
@@ -771,12 +713,8 @@ class _LineTrendPainter extends CustomPainter {
 
     // Peak dot
     final peakIdx = values.indexOf(values.reduce(max));
-    canvas.drawCircle(
-        points[peakIdx], 4, Paint()..color = color);
-    canvas.drawCircle(
-        points[peakIdx],
-        7,
-        Paint()..color = color.withOpacity(0.2));
+    canvas.drawCircle(points[peakIdx], 4, Paint()..color = color);
+    canvas.drawCircle(points[peakIdx], 7, Paint()..color = color.withOpacity(0.2));
 
     // Labels
     final tp = TextPainter(textDirection: TextDirection.ltr);
@@ -790,65 +728,12 @@ class _LineTrendPainter extends CustomPainter {
         ),
       );
       tp.layout();
-      tp.paint(canvas,
-          Offset(i * stepX - tp.width / 2, size.height - 14));
+      tp.paint(canvas, Offset(i * stepX - tp.width / 2, size.height - 14));
     }
   }
 
   @override
   bool shouldRepaint(_) => false;
-}
-
-// ── Bottom Nav ─────────────────────────────────────────────────────────────
-
-class _BottomNav extends StatelessWidget {
-  final int activeIndex;
-  const _BottomNav({required this.activeIndex});
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (Icons.home_outlined, Icons.home_rounded, 'Home'),
-      (Icons.add_box_outlined, Icons.add_box_rounded, 'Add'),
-      (Icons.chat_bubble_outline_rounded,
-          Icons.chat_bubble_rounded, 'Groups'),
-      (Icons.bar_chart_outlined, Icons.bar_chart_rounded, 'Analytics'),
-      (Icons.person_outline_rounded, Icons.person_rounded, 'Profile'),
-    ];
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.025),
-        border: Border(
-            top: BorderSide(color: Colors.white.withOpacity(0.07))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (i) {
-          final active = i == activeIndex;
-          return GestureDetector(
-            onTap: () {},
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(active ? items[i].$2 : items[i].$1, size: 22,
-                    color: active
-                        ? const Color(0xFF818CF8)
-                        : Colors.white.withOpacity(0.28)),
-                const SizedBox(height: 3),
-                Text(items[i].$3,
-                    style: TextStyle(
-                        fontFamily: 'Outfit', fontSize: 10,
-                        color: active
-                            ? const Color(0xFF818CF8)
-                            : Colors.white.withOpacity(0.28))),
-              ],
-            ),
-          );
-        }),
-      ),
-    );
-  }
 }
 
 // ── Shared Helpers ─────────────────────────────────────────────────────────
@@ -866,8 +751,7 @@ class _Orb extends StatelessWidget {
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient:
-              RadialGradient(colors: [color, Colors.transparent]),
+          gradient: RadialGradient(colors: [color, Colors.transparent]),
         ),
       ),
     );

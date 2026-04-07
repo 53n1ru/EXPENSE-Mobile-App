@@ -7,20 +7,19 @@ class UserService {
   static final _storage = FirebaseStorage.instance;
 
   // ── Create user on register ────────────────────────────
-  static Future<void> createUser({
-    required String userId,
-    required String name,
-    required String email,
-    required String profileType,
-  }) async {
-    await _db.collection('users').doc(userId).set({
-      'name': name,
-      'email': email,
-      'profileType': profileType,
-      'avatarUrl': '',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-  }
+ // ✅ updated — no profileType
+static Future<void> createUser({
+  required String userId,
+  required String name,
+  required String email,
+}) async {
+  await _db.collection('users').doc(userId).set({
+    'name': name,
+    'email': email,
+    'avatarUrl': '',
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
 
   // ── Get user data ──────────────────────────────────────
   static Future<Map<String, dynamic>?> getUser(String userId) async {

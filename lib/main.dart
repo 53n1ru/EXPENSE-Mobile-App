@@ -6,6 +6,7 @@ import 'loading_screen.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 import 'dashboard.dart';
+import 'main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +65,7 @@ class AuthWrapper extends StatelessWidget {
 
         // User is logged in → go to Dashboard
         if (snapshot.hasData && snapshot.data != null) {
-          return const DashboardPage();
+          return const MainShell();
         }
 
         // No user → go to Login

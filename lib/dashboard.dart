@@ -5,8 +5,7 @@ import 'services/expense_service.dart';
 import 'services/user_service.dart';
 import 'add_expenses.dart';
 import 'analysis.dart';
-import 'profile.dart';
-import 'group_page.dart';
+import 'history_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -59,7 +58,6 @@ class _DashboardPageState extends State<DashboardPage>
     super.dispose();
   }
 
-  // ── Load all data ──────────────────────────────────────
   Future<void> _loadData() async {
     await _loadUserName();
     await _loadExpenses();
@@ -89,8 +87,7 @@ class _DashboardPageState extends State<DashboardPage>
 
   Future<void> _loadExpenses() async {
     try {
-      final snapshot =
-          await ExpenseService.getMonthlyExpenses().first;
+      final snapshot = await ExpenseService.getMonthlyExpenses().first;
       final docs = snapshot.docs;
 
       double spent = 0;
@@ -169,7 +166,6 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   Widget build(BuildContext context) {
-    // ✅ All calculated from real data — no hardcoding
     final remaining = _totalIncome - _totalSpent;
     final budgetPct = _totalIncome > 0
         ? (_totalSpent / _totalIncome).clamp(0.0, 1.0)
@@ -216,8 +212,7 @@ class _DashboardPageState extends State<DashboardPage>
                 children: [
                   // ── Top bar ──────────────────────────
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                        20, 12, 20, 0),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: Row(
                       children: [
                         Container(
@@ -226,8 +221,7 @@ class _DashboardPageState extends State<DashboardPage>
                             color: _indigo.withOpacity(0.15),
                             shape: BoxShape.circle,
                             border: Border.all(
-                                color:
-                                    _indigo.withOpacity(0.3)),
+                                color: _indigo.withOpacity(0.3)),
                           ),
                           child: Center(
                             child: Text(
@@ -244,22 +238,18 @@ class _DashboardPageState extends State<DashboardPage>
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
                                 'Welcome back,',
                                 style: TextStyle(
                                   fontFamily: 'Outfit',
                                   fontSize: 11,
-                                  color: Colors.white
-                                      .withOpacity(0.35),
+                                  color: Colors.white.withOpacity(0.35),
                                 ),
                               ),
                               Text(
-                                _userName.isEmpty
-                                    ? 'Loading...'
-                                    : _userName,
+                                _userName.isEmpty ? 'Loading...' : _userName,
                                 style: const TextStyle(
                                   fontFamily: 'Outfit',
                                   fontSize: 15,
@@ -273,19 +263,15 @@ class _DashboardPageState extends State<DashboardPage>
                         Container(
                           width: 36, height: 36,
                           decoration: BoxDecoration(
-                            color:
-                                Colors.white.withOpacity(0.05),
-                            borderRadius:
-                                BorderRadius.circular(11),
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(11),
                             border: Border.all(
-                                color: Colors.white
-                                    .withOpacity(0.08)),
+                                color: Colors.white.withOpacity(0.08)),
                           ),
                           child: Icon(
                             Icons.notifications_none_rounded,
                             size: 18,
-                            color:
-                                Colors.white.withOpacity(0.5),
+                            color: Colors.white.withOpacity(0.5),
                           ),
                         ),
                       ],
@@ -305,60 +291,43 @@ class _DashboardPageState extends State<DashboardPage>
                           )
                         : RefreshIndicator(
                             color: _indigo,
-                            backgroundColor:
-                                const Color(0xFF1A1D27),
+                            backgroundColor: const Color(0xFF1A1D27),
                             onRefresh: _loadData,
                             child: SingleChildScrollView(
-                              physics:
-                                  const AlwaysScrollableScrollPhysics(),
-                              padding:
-                                  const EdgeInsets.fromLTRB(
-                                      16, 0, 16, 16),
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                               child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   // ── Stat cards ───────
                                   Row(children: [
                                     Expanded(
                                       child: _StatCard(
-                                        label:
-                                            'This Month Spending',
-                                        value: _formatAmount(
-                                            _totalSpent),
+                                        label: 'This Month Spending',
+                                        value: _formatAmount(_totalSpent),
                                         sub: _totalIncome > 0
                                             ? (remaining >= 0
                                                 ? '▼ ${_formatAmount(remaining)} left'
                                                 : '▲ Over by ${_formatAmount(remaining.abs())}')
                                             : 'Add income to track',
                                         subColor: remaining >= 0
-                                            ? const Color(
-                                                0xFF5DCAA5)
-                                            : const Color(
-                                                0xFFF09595),
-                                        valueColor: const Color(
-                                            0xFFF8FAFC),
+                                            ? const Color(0xFF5DCAA5)
+                                            : const Color(0xFFF09595),
+                                        valueColor: const Color(0xFFF8FAFC),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: _StatCard(
-                                        label:
-                                            'This Month Income',
-                                        value: _formatAmount(
-                                            _totalIncome),
+                                        label: 'This Month Income',
+                                        value: _formatAmount(_totalIncome),
                                         sub: _totalIncome == 0
                                             ? 'Tap + to add income'
                                             : '${((remaining / _totalIncome) * 100).clamp(0, 100).toStringAsFixed(0)}% remaining',
-                                        subColor: _totalIncome ==
-                                                0
-                                            ? const Color(
-                                                    0xFF818CF8)
-                                                .withOpacity(0.5)
-                                            : const Color(
-                                                0xFF818CF8),
-                                        valueColor: const Color(
-                                            0xFF818CF8),
+                                        subColor: _totalIncome == 0
+                                            ? const Color(0xFF818CF8).withOpacity(0.5)
+                                            : const Color(0xFF818CF8),
+                                        valueColor: const Color(0xFF818CF8),
                                       ),
                                     ),
                                   ]),
@@ -368,9 +337,7 @@ class _DashboardPageState extends State<DashboardPage>
                                   // ── Budget bar ────────
                                   Column(children: [
                                     Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment
-                                              .spaceBetween,
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
                                           _totalIncome == 0
@@ -379,12 +346,9 @@ class _DashboardPageState extends State<DashboardPage>
                                           style: TextStyle(
                                             fontFamily: 'Outfit',
                                             fontSize: 10,
-                                            color: Colors.white
-                                                .withOpacity(
-                                                    0.35),
+                                            color: Colors.white.withOpacity(0.35),
                                           ),
                                         ),
-                                        // ✅ Tap to add income
                                         GestureDetector(
                                           onTap: () => _navigate(
                                             const AddExpensePage(),
@@ -395,25 +359,18 @@ class _DashboardPageState extends State<DashboardPage>
                                               _totalIncome == 0
                                                   ? 'Add income +'
                                                   : '${(budgetPct * 100).toStringAsFixed(0)}% used',
-                                              style:
-                                                  const TextStyle(
-                                                fontFamily:
-                                                    'Outfit',
+                                              style: const TextStyle(
+                                                fontFamily: 'Outfit',
                                                 fontSize: 10,
-                                                color: Color(
-                                                    0xFF818CF8),
+                                                color: Color(0xFF818CF8),
                                               ),
                                             ),
-                                            if (_totalIncome ==
-                                                0) ...[
-                                              const SizedBox(
-                                                  width: 3),
+                                            if (_totalIncome == 0) ...[
+                                              const SizedBox(width: 3),
                                               const Icon(
-                                                Icons
-                                                    .add_circle_outline_rounded,
+                                                Icons.add_circle_outline_rounded,
                                                 size: 11,
-                                                color: Color(
-                                                    0xFF818CF8),
+                                                color: Color(0xFF818CF8),
                                               ),
                                             ],
                                           ]),
@@ -422,87 +379,56 @@ class _DashboardPageState extends State<DashboardPage>
                                     ),
                                     const SizedBox(height: 6),
                                     ClipRRect(
-                                      borderRadius:
-                                          BorderRadius.circular(
-                                              100),
-                                      child:
-                                          LinearProgressIndicator(
+                                      borderRadius: BorderRadius.circular(100),
+                                      child: LinearProgressIndicator(
                                         value: budgetPct,
                                         minHeight: 6,
-                                        backgroundColor:
-                                            Colors.white
-                                                .withOpacity(
-                                                    0.07),
-                                        valueColor:
-                                            AlwaysStoppedAnimation
-                                                <Color>(
+                                        backgroundColor: Colors.white.withOpacity(0.07),
+                                        valueColor: AlwaysStoppedAnimation<Color>(
                                           budgetPct > 0.8
-                                              ? const Color(
-                                                  0xFFF09595)
+                                              ? const Color(0xFFF09595)
                                               : _indigo,
                                         ),
                                       ),
                                     ),
-                                    // ── Income vs Expense breakdown
-                                    if (_totalIncome > 0 ||
-                                        _totalSpent > 0) ...[
+                                    if (_totalIncome > 0 || _totalSpent > 0) ...[
                                       const SizedBox(height: 8),
                                       Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment
-                                                .spaceBetween,
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                         children: [
                                           Row(children: [
                                             Container(
-                                              width: 6,
-                                              height: 6,
-                                              decoration:
-                                                  const BoxDecoration(
-                                                color: Color(
-                                                    0xFF5DCAA5),
-                                                shape: BoxShape
-                                                    .circle,
+                                              width: 6, height: 6,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFF5DCAA5),
+                                                shape: BoxShape.circle,
                                               ),
                                             ),
-                                            const SizedBox(
-                                                width: 5),
+                                            const SizedBox(width: 5),
                                             Text(
                                               'Income: ${_formatAmount(_totalIncome)}',
                                               style: TextStyle(
-                                                fontFamily:
-                                                    'Outfit',
+                                                fontFamily: 'Outfit',
                                                 fontSize: 10,
-                                                color: Colors
-                                                    .white
-                                                    .withOpacity(
-                                                        0.35),
+                                                color: Colors.white.withOpacity(0.35),
                                               ),
                                             ),
                                           ]),
                                           Row(children: [
                                             Container(
-                                              width: 6,
-                                              height: 6,
-                                              decoration:
-                                                  const BoxDecoration(
-                                                color: Color(
-                                                    0xFFF09595),
-                                                shape: BoxShape
-                                                    .circle,
+                                              width: 6, height: 6,
+                                              decoration: const BoxDecoration(
+                                                color: Color(0xFFF09595),
+                                                shape: BoxShape.circle,
                                               ),
                                             ),
-                                            const SizedBox(
-                                                width: 5),
+                                            const SizedBox(width: 5),
                                             Text(
                                               'Spent: ${_formatAmount(_totalSpent)}',
                                               style: TextStyle(
-                                                fontFamily:
-                                                    'Outfit',
+                                                fontFamily: 'Outfit',
                                                 fontSize: 10,
-                                                color: Colors
-                                                    .white
-                                                    .withOpacity(
-                                                        0.35),
+                                                color: Colors.white.withOpacity(0.35),
                                               ),
                                             ),
                                           ]),
@@ -517,11 +443,9 @@ class _DashboardPageState extends State<DashboardPage>
                                   Row(children: [
                                     Expanded(
                                       child: _QuickAction(
-                                        icon: Icons
-                                            .add_card_outlined,
+                                        icon: Icons.add_card_outlined,
                                         label: 'Add Expense',
-                                        color: const Color(
-                                            0xFF818CF8),
+                                        color: const Color(0xFF818CF8),
                                         onTap: () => _navigate(
                                           const AddExpensePage(),
                                           reload: true,
@@ -531,25 +455,19 @@ class _DashboardPageState extends State<DashboardPage>
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: _QuickAction(
-                                        icon: Icons
-                                            .history_rounded,
+                                        icon: Icons.history_rounded,
                                         label: 'History',
-                                        color: const Color(
-                                            0xFF5DCAA5),
-                                        onTap: () => _navigate(
-                                            const AnalysisPage()),
+                                        color: const Color(0xFF5DCAA5),
+                                        onTap: () => _navigate(const HistoryPage()),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: _QuickAction(
-                                        icon: Icons
-                                            .bar_chart_rounded,
+                                        icon: Icons.bar_chart_rounded,
                                         label: 'Analytics',
-                                        color: const Color(
-                                            0xFFEC4899),
-                                        onTap: () => _navigate(
-                                            const AnalysisPage()),
+                                        color: const Color(0xFFEC4899),
+                                        onTap: () => _navigate(const AnalysisPage()),
                                       ),
                                     ),
                                   ]),
@@ -558,41 +476,30 @@ class _DashboardPageState extends State<DashboardPage>
 
                                   // ── Expense history ───
                                   Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .spaceBetween,
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
                                       const Text(
                                         'Expense History',
                                         style: TextStyle(
                                           fontFamily: 'Outfit',
                                           fontSize: 14,
-                                          fontWeight:
-                                              FontWeight.w600,
-                                          color:
-                                              Color(0xFFF8FAFC),
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFF8FAFC),
                                         ),
                                       ),
                                       TextButton(
-                                        onPressed: () =>
-                                            _navigate(const
-                                                AnalysisPage()),
-                                        style:
-                                            TextButton.styleFrom(
-                                          padding:
-                                              EdgeInsets.zero,
+                                        onPressed: () => _navigate(const HistoryPage()),
+                                        style: TextButton.styleFrom(
+                                          padding: EdgeInsets.zero,
                                           minimumSize: Size.zero,
-                                          tapTargetSize:
-                                              MaterialTapTargetSize
-                                                  .shrinkWrap,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                         ),
                                         child: const Text(
                                           'See all →',
                                           style: TextStyle(
                                             fontFamily: 'Outfit',
                                             fontSize: 12,
-                                            color: Color(
-                                                0xFF818CF8),
+                                            color: Color(0xFF818CF8),
                                           ),
                                         ),
                                       ),
@@ -601,7 +508,6 @@ class _DashboardPageState extends State<DashboardPage>
 
                                   const SizedBox(height: 8),
 
-                                  // Expense list or empty
                                   _recentExpenses.isEmpty
                                       ? _EmptyExpenses(
                                           onAdd: () => _navigate(
@@ -610,13 +516,9 @@ class _DashboardPageState extends State<DashboardPage>
                                           ),
                                         )
                                       : Column(
-                                          children:
-                                              _recentExpenses
-                                                  .map((e) =>
-                                                      _ExpenseItem(
-                                                          expense:
-                                                              e))
-                                                  .toList(),
+                                          children: _recentExpenses
+                                              .map((e) => _ExpenseItem(expense: e))
+                                              .toList(),
                                         ),
 
                                   const SizedBox(height: 16),
@@ -627,8 +529,7 @@ class _DashboardPageState extends State<DashboardPage>
                                     style: TextStyle(
                                       fontFamily: 'Outfit',
                                       fontSize: 14,
-                                      fontWeight:
-                                          FontWeight.w600,
+                                      fontWeight: FontWeight.w600,
                                       color: Color(0xFFF8FAFC),
                                     ),
                                   ),
@@ -639,30 +540,7 @@ class _DashboardPageState extends State<DashboardPage>
                             ),
                           ),
                   ),
-
-                  // ── Bottom nav ───────────────────────
-                  _BottomNavBar(
-                    activeIndex: 0,
-                    onTap: (index) {
-                      switch (index) {
-                        case 0:
-                          break;
-                        case 1:
-                          _navigate(const AddExpensePage(),
-                              reload: true);
-                          break;
-                        case 2:
-                          _navigate(const GroupsPage());
-                          break;
-                        case 3:
-                          _navigate(const AnalysisPage());
-                          break;
-                        case 4:
-                          _navigate(const ProfilePage());
-                          break;
-                      }
-                    },
-                  ),
+                  // ── NO BottomNavBar here — handled by MainShell ──
                 ],
               ),
             ),
@@ -693,8 +571,7 @@ class _StatCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(14),
-        border:
-            Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -750,8 +627,7 @@ class _QuickAction extends StatelessWidget {
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.03),
           borderRadius: BorderRadius.circular(13),
-          border: Border.all(
-              color: Colors.white.withOpacity(0.07)),
+          border: Border.all(color: Colors.white.withOpacity(0.07)),
         ),
         child: Column(children: [
           Icon(icon, size: 22, color: color),
@@ -801,20 +677,16 @@ class _ExpenseItem extends StatelessWidget {
     final name = expense['name'] as String;
     final amount = (expense['amount'] as num).toDouble();
     final isPositive = amount > 0;
-    final color =
-        _categoryColors[name] ?? const Color(0xFF888780);
-    final icon =
-        _categoryIcons[name] ?? Icons.more_horiz_rounded;
+    final color = _categoryColors[name] ?? const Color(0xFF888780);
+    final icon = _categoryIcons[name] ?? Icons.more_horiz_rounded;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(
-          horizontal: 13, vertical: 11),
+      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-            color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
       ),
       child: Row(children: [
         Container(
@@ -899,8 +771,7 @@ class _EmptyExpenses extends StatelessWidget {
               style: TextStyle(
                 fontFamily: 'Outfit',
                 fontSize: 11,
-                color:
-                    const Color(0xFF818CF8).withOpacity(0.6),
+                color: const Color(0xFF818CF8).withOpacity(0.6),
               )),
         ]),
       ),
@@ -958,70 +829,6 @@ class _LovedOnesCard extends StatelessWidget {
               color: Colors.white.withOpacity(0.22)),
           const SizedBox(width: 16),
         ]),
-      ),
-    );
-  }
-}
-
-// ── Bottom Nav Bar ─────────────────────────────────────────────────────────
-
-class _BottomNavBar extends StatelessWidget {
-  final int activeIndex;
-  final void Function(int) onTap;
-  const _BottomNavBar({
-    required this.activeIndex,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final items = [
-      (Icons.home_outlined, Icons.home_rounded, 'Home'),
-      (Icons.add_box_outlined, Icons.add_box_rounded, 'Add'),
-      (Icons.chat_bubble_outline_rounded,
-          Icons.chat_bubble_rounded, 'Groups'),
-      (Icons.bar_chart_outlined,
-          Icons.bar_chart_rounded, 'Analytics'),
-      (Icons.person_outline_rounded,
-          Icons.person_rounded, 'Profile'),
-    ];
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.025),
-        border: Border(
-            top: BorderSide(
-                color: Colors.white.withOpacity(0.07))),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(items.length, (i) {
-          final active = i == activeIndex;
-          return GestureDetector(
-            onTap: () => onTap(i),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  active ? items[i].$2 : items[i].$1,
-                  size: 22,
-                  color: active
-                      ? const Color(0xFF818CF8)
-                      : Colors.white.withOpacity(0.28),
-                ),
-                const SizedBox(height: 3),
-                Text(items[i].$3,
-                    style: TextStyle(
-                      fontFamily: 'Outfit',
-                      fontSize: 10,
-                      color: active
-                          ? const Color(0xFF818CF8)
-                          : Colors.white.withOpacity(0.28),
-                    )),
-              ],
-            ),
-          );
-        }),
       ),
     );
   }

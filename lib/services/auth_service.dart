@@ -1,48 +1,56 @@
+import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_service.dart';
 
 class AuthService {
   static final _auth = FirebaseAuth.instance;
 
-  // Current logged in user
   static User? get currentUser => _auth.currentUser;
   static String? get currentUserId => _auth.currentUser?.uid;
-
-  // Auth state stream
-  static Stream<User?> get authStateChanges => _auth.authStateChanges();
-
-  // Add this method inside AuthService class
-static Future<void> sendPasswordReset({required String email}) async {
-  await _auth.sendPasswordResetEmail(email: email);
-}
+  static Stream<User?> get authStateChanges =>
+      _auth.authStateChanges();
 
   // ── Register ───────────────────────────────────────────
   static Future<String?> register({
     required String name,
     required String email,
     required String password,
-    required String profileType,
   }) async {
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
+      final credential =
+          await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      // Update display name
       await credential.user?.updateDisplayName(name);
 
-      // Save user data to Firestore
+      // Save user profile
       await UserService.createUser(
         userId: credential.user!.uid,
         name: name,
         email: email,
-        profileType: profileType,
       );
 
-      return null; // null = success
+      // ✅ Auto-create default Solo account
+      await FirebaseFirestore.instance
+          .collection('accounts')
+          .add({
+        'userId': credential.user!.uid,
+        'name': 'Personal',
+        'type': 'Solo',
+        'color': '0xFF6366F1',
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      return null;
     } on FirebaseAuthException catch (e) {
+      debugPrint('Auth error: ${e.code}');
       return _authError(e.code);
+    } catch (e) {
+      debugPrint('Unknown error: $e');
+      return 'Something went wrong. Try again';
     }
   }
 
@@ -56,8 +64,9 @@ static Future<void> sendPasswordReset({required String email}) async {
         email: email,
         password: password,
       );
-      return null; // null = success
+      return null;
     } on FirebaseAuthException catch (e) {
+      debugPrint('Auth error: ${e.code}');
       return _authError(e.code);
     }
   }
@@ -65,6 +74,13 @@ static Future<void> sendPasswordReset({required String email}) async {
   // ── Logout ─────────────────────────────────────────────
   static Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  // ── Password Reset ─────────────────────────────────────
+  static Future<void> sendPasswordReset({
+    required String email,
+  }) async {
+    await _auth.sendPasswordResetEmail(email: email);
   }
 
   // ── Error messages ─────────────────────────────────────
@@ -82,6 +98,8 @@ static Future<void> sendPasswordReset({required String email}) async {
         return 'Password must be at least 6 characters';
       case 'too-many-requests':
         return 'Too many attempts. Try again later';
+      case 'invalid-credential':
+        return 'Invalid email or password';
       default:
         return 'Something went wrong. Try again';
     }

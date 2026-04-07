@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -37,7 +38,8 @@ class _LoginPageState extends State<LoginPage>
       duration: const Duration(milliseconds: 800),
     )..forward();
 
-    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(
+        parent: _fadeController, curve: Curves.easeOut);
     _slideAnim = Tween<double>(begin: 20, end: 0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
@@ -52,30 +54,65 @@ class _LoginPageState extends State<LoginPage>
     super.dispose();
   }
 
+  // ── Firebase Login ─────────────────────────────────────
   Future<void> _login() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please fill all fields'),
-          backgroundColor: _indigo.withOpacity(0.9),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showSnack('Please fill all fields', isError: true);
       return;
     }
+
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1200));
-    setState(() => _isLoading = false);
-    // 👉 Your login logic here
-    if (!mounted) return;
+
+    final error = await AuthService.login(
+      email: email,
+      password: password,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (error != null) {
+        _showSnack(error, isError: true);
+      }
+      // ✅ No navigation needed — AuthWrapper handles it automatically
+    }
+  }
+
+  // ── Forgot Password ────────────────────────────────────
+  Future<void> _forgotPassword() async {
+    final email = _emailController.text.trim();
+
+    if (email.isEmpty) {
+      _showSnack('Enter your email first', isError: true);
+      return;
+    }
+
+    try {
+      await AuthService.sendPasswordReset(email: email);
+      if (mounted) {
+        _showSnack('Reset link sent to $email', isError: false);
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnack('Failed to send reset email', isError: true);
+      }
+    }
+  }
+
+  // ── Snackbar helper ────────────────────────────────────
+  void _showSnack(String msg, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Login successful'),
-        backgroundColor: const Color(0xFF1D9E75),
+        content: Text(msg,
+            style: const TextStyle(fontFamily: 'Outfit')),
+        backgroundColor: isError
+            ? const Color(0xFF6366F1).withOpacity(0.9)
+            : const Color(0xFF1D9E75),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12)),
       ),
     );
   }
@@ -86,29 +123,29 @@ class _LoginPageState extends State<LoginPage>
       backgroundColor: _bg,
       body: Stack(
         children: [
-          // ── Animated orbs ───────────────────────────────────
+          // ── Animated orbs ──────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
             builder: (_, __) {
               final t = _orbController.value;
               return Stack(children: [
-                _Orb(x: -70 + 30 * t, y: -90 + 40 * t, size: 300,
-                    color: _indigo.withOpacity(0.28)),
+                _Orb(x: -70 + 30 * t, y: -90 + 40 * t,
+                    size: 300, color: _indigo.withOpacity(0.28)),
                 _Orb(
                     x: MediaQuery.of(context).size.width - 190 - 20 * t,
                     y: MediaQuery.of(context).size.height - 280 + 28 * t,
                     size: 240, color: _purple.withOpacity(0.18)),
                 _Orb(x: -30 + 28 * t,
                     y: MediaQuery.of(context).size.height - 380 - 20 * t,
-                    size: 180, color: const Color(0xFF14B8A6).withOpacity(0.14)),
+                    size: 180,
+                    color: const Color(0xFF14B8A6).withOpacity(0.14)),
               ]);
             },
           ),
 
-          // ── Grid ────────────────────────────────────────────
           CustomPaint(size: Size.infinite, painter: _GridPainter()),
 
-          // ── Content ─────────────────────────────────────────
+          // ── Content ────────────────────────────────────
           SafeArea(
             child: AnimatedBuilder(
               animation: _fadeAnim,
@@ -127,11 +164,9 @@ class _LoginPageState extends State<LoginPage>
                     children: [
                       const SizedBox(height: 16),
 
-                      // Avatar badge
                       _AvatarBadge(controller: _orbController),
                       const SizedBox(height: 20),
 
-                      // Labels
                       Text(
                         'WELCOME BACK',
                         style: TextStyle(
@@ -165,7 +200,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 36),
 
-                      // Email field
+                      // ── Email ──────────────────────────
                       _FieldLabel(label: 'Email address'),
                       const SizedBox(height: 6),
                       _StyledField(
@@ -177,7 +212,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 14),
 
-                      // Password field
+                      // ── Password ───────────────────────
                       _FieldLabel(label: 'Password'),
                       const SizedBox(height: 6),
                       _StyledField(
@@ -200,15 +235,16 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 10),
 
-                      // Forgot password
+                      // ── Forgot password ────────────────
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () {},
+                          onPressed: _forgotPassword,
                           style: TextButton.styleFrom(
                               padding: EdgeInsets.zero,
                               minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                              tapTargetSize:
+                                  MaterialTapTargetSize.shrinkWrap),
                           child: Text(
                             'Forgot password?',
                             style: TextStyle(
@@ -222,7 +258,7 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 24),
 
-                      // Login button
+                      // ── Login button ───────────────────
                       _GradientButton(
                         label: 'Continue',
                         isLoading: _isLoading,
@@ -232,12 +268,13 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 24),
 
-                      // Divider
+                      // ── Divider ────────────────────────
                       Row(children: [
                         Expanded(child: Container(height: 1,
                             color: Colors.white.withOpacity(0.07))),
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12),
                           child: Text(
                             'or continue with',
                             style: TextStyle(
@@ -253,45 +290,52 @@ class _LoginPageState extends State<LoginPage>
 
                       const SizedBox(height: 16),
 
-                      // Social buttons
+                      // ── Social buttons ─────────────────
                       Row(children: [
-                        Expanded(child: _SocialButton(label: 'Google',
+                        Expanded(child: _SocialButton(
+                            label: 'Google',
                             icon: Icons.g_mobiledata_rounded)),
                         const SizedBox(width: 10),
-                        Expanded(child: _SocialButton(label: 'Apple',
+                        Expanded(child: _SocialButton(
+                            label: 'Apple',
                             icon: Icons.apple_rounded)),
                       ]),
 
                       const SizedBox(height: 24),
 
-                      // Sign up
-                      Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                        Text(
-                          'No account yet?',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 13,
-                            color: Colors.white.withOpacity(0.3),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () =>
-                              Navigator.pushNamed(context, '/register'),
-                          style: TextButton.styleFrom(
-                              padding: const EdgeInsets.only(left: 4),
-                              minimumSize: Size.zero,
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                          child: const Text(
-                            'Create one',
+                      // ── Sign up link ───────────────────
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'No account yet?',
                             style: TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: Color(0xFF818CF8),
+                              color: Colors.white.withOpacity(0.3),
                             ),
                           ),
-                        ),
-                      ]),
+                          TextButton(
+                            onPressed: () => Navigator.pushNamed(
+                                context, '/register'),
+                            style: TextButton.styleFrom(
+                                padding:
+                                    const EdgeInsets.only(left: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap),
+                            child: const Text(
+                              'Create one',
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: Color(0xFF818CF8),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                     ],
                   ),
@@ -310,7 +354,8 @@ class _LoginPageState extends State<LoginPage>
 class _Orb extends StatelessWidget {
   final double x, y, size;
   final Color color;
-  const _Orb({required this.x, required this.y, required this.size, required this.color});
+  const _Orb({required this.x, required this.y,
+      required this.size, required this.color});
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -319,7 +364,8 @@ class _Orb extends StatelessWidget {
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: RadialGradient(colors: [color, Colors.transparent]),
+          gradient: RadialGradient(
+              colors: [color, Colors.transparent]),
         ),
       ),
     );
@@ -366,7 +412,8 @@ class _AvatarBadge extends StatelessWidget {
               ],
             ),
             border: Border.all(
-              color: const Color(0xFF6366F1).withOpacity(0.3), width: 1),
+                color: const Color(0xFF6366F1).withOpacity(0.3),
+                width: 1),
             boxShadow: [BoxShadow(
               color: const Color(0xFF6366F1).withOpacity(glow),
               blurRadius: 20, spreadRadius: 4,
@@ -478,7 +525,10 @@ class _GradientButtonState extends State<_GradientButton> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
@@ -505,7 +555,7 @@ class _GradientButtonState extends State<_GradientButton> {
                 ? const SizedBox(
                     width: 20, height: 20,
                     child: CircularProgressIndicator(
-                      color: Colors.white, strokeWidth: 2))
+                        color: Colors.white, strokeWidth: 2))
                 : Text(
                     widget.label.toUpperCase(),
                     style: const TextStyle(

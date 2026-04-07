@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'services/auth_service.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -11,10 +12,12 @@ class _RegisterPageState extends State<RegisterPage>
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   String _selectedType = '';
   bool _isChecked = false;
   bool _obscure = true;
+  bool _obscureConfirm = true;
   bool _isLoading = false;
 
   late AnimationController _orbController;
@@ -38,7 +41,8 @@ class _RegisterPageState extends State<RegisterPage>
       vsync: this, duration: const Duration(milliseconds: 800),
     )..forward();
 
-    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(
+        parent: _fadeController, curve: Curves.easeOut);
     _slideAnim = Tween<double>(begin: 20, end: 0).animate(
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
@@ -51,35 +55,71 @@ class _RegisterPageState extends State<RegisterPage>
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
+  // ── Firebase Register ──────────────────────────────────
   Future<void> _register() async {
-    if (_nameController.text.trim().isEmpty ||
-        _emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty ||
-        _selectedType.isEmpty ||
-        !_isChecked) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Please complete all fields'),
-          backgroundColor: _indigo.withOpacity(0.9),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
+
+    // ── Validation ─────────────────────────────────────
+    if (name.isEmpty || email.isEmpty ||
+        password.isEmpty || confirmPassword.isEmpty) {
+      _showSnack('Please complete all fields', isError: true);
       return;
     }
+
+    if (_selectedType.isEmpty) {
+      _showSnack('Please select a profile type', isError: true);
+      return;
+    }
+
+    if (password.length < 6) {
+      _showSnack('Password must be at least 6 characters', isError: true);
+      return;
+    }
+
+    if (password != confirmPassword) {
+      _showSnack('Passwords do not match', isError: true);
+      return;
+    }
+
+    if (!_isChecked) {
+      _showSnack('Please accept the Terms of Service', isError: true);
+      return;
+    }
+
     setState(() => _isLoading = true);
-    await Future.delayed(const Duration(milliseconds: 1400));
-    setState(() => _isLoading = false);
-    // 👉 Your register logic here
-    if (!mounted) return;
+
+    final error = await AuthService.register(
+      name: name,
+      email: email,
+      password: password,
+      profileType: _selectedType,
+    );
+
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (error != null) {
+        _showSnack(error, isError: true);
+      }
+      // ✅ No navigation needed — AuthWrapper handles it automatically
+    }
+  }
+
+  // ── Snackbar helper ────────────────────────────────────
+  void _showSnack(String msg, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Account created successfully'),
-        backgroundColor: const Color(0xFF1D9E75),
+        content: Text(msg,
+            style: const TextStyle(fontFamily: 'Outfit')),
+        backgroundColor: isError
+            ? const Color(0xFF6366F1).withOpacity(0.9)
+            : const Color(0xFF1D9E75),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12)),
@@ -93,7 +133,7 @@ class _RegisterPageState extends State<RegisterPage>
       backgroundColor: _bg,
       body: Stack(
         children: [
-          // ── Orbs ────────────────────────────────────────────
+          // ── Orbs ──────────────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
             builder: (_, __) {
@@ -114,14 +154,15 @@ class _RegisterPageState extends State<RegisterPage>
 
           CustomPaint(size: Size.infinite, painter: _GridPainter()),
 
-          // ── Content ─────────────────────────────────────────
+          // ── Content ───────────────────────────────────
           SafeArea(
             child: AnimatedBuilder(
               animation: _fadeAnim,
               builder: (_, child) => Opacity(
                 opacity: _fadeAnim.value,
                 child: Transform.translate(
-                    offset: Offset(0, _slideAnim.value), child: child),
+                    offset: Offset(0, _slideAnim.value),
+                    child: child),
               ),
               child: Column(
                 children: [
@@ -143,7 +184,8 @@ class _RegisterPageState extends State<RegisterPage>
                                 border: Border.all(
                                     color: Colors.white.withOpacity(0.08)),
                               ),
-                              child: const Icon(Icons.chevron_left_rounded,
+                              child: const Icon(
+                                  Icons.chevron_left_rounded,
                                   color: Colors.white54, size: 20),
                             ),
                           ),
@@ -176,9 +218,11 @@ class _RegisterPageState extends State<RegisterPage>
                         ),
                       ),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+                        padding: const EdgeInsets.fromLTRB(
+                            24, 24, 24, 32),
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Create account',
@@ -197,12 +241,14 @@ class _RegisterPageState extends State<RegisterPage>
                                 fontFamily: 'Outfit',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w300,
-                                color: const Color(0xFFF8FAFC).withOpacity(0.35),
+                                color: const Color(0xFFF8FAFC)
+                                    .withOpacity(0.35),
                               ),
                             ),
 
                             const SizedBox(height: 22),
 
+                            // ── Full name ──────────────
                             _FieldLabel(label: 'Full name'),
                             const SizedBox(height: 6),
                             _StyledField(
@@ -213,6 +259,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                             const SizedBox(height: 14),
 
+                            // ── Email ──────────────────
                             _FieldLabel(label: 'Email address'),
                             const SizedBox(height: 6),
                             _StyledField(
@@ -224,6 +271,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                             const SizedBox(height: 14),
 
+                            // ── Password ───────────────
                             _FieldLabel(label: 'Password'),
                             const SizedBox(height: 6),
                             _StyledField(
@@ -239,17 +287,41 @@ class _RegisterPageState extends State<RegisterPage>
                                   size: 17,
                                   color: Colors.white.withOpacity(0.28),
                                 ),
-                                onPressed: () =>
-                                    setState(() => _obscure = !_obscure),
+                                onPressed: () => setState(
+                                    () => _obscure = !_obscure),
+                              ),
+                            ),
+
+                            const SizedBox(height: 14),
+
+                            // ── Confirm Password ───────
+                            _FieldLabel(label: 'Confirm password'),
+                            const SizedBox(height: 6),
+                            _StyledField(
+                              controller: _confirmPasswordController,
+                              hint: '••••••••••',
+                              icon: Icons.lock_outline_rounded,
+                              obscure: _obscureConfirm,
+                              suffix: IconButton(
+                                icon: Icon(
+                                  _obscureConfirm
+                                      ? Icons.visibility_off_outlined
+                                      : Icons.visibility_outlined,
+                                  size: 17,
+                                  color: Colors.white.withOpacity(0.28),
+                                ),
+                                onPressed: () => setState(
+                                    () => _obscureConfirm =
+                                        !_obscureConfirm),
                               ),
                             ),
 
                             const SizedBox(height: 22),
 
+                            // ── Profile type ───────────
                             _FieldLabel(label: 'Profile type'),
                             const SizedBox(height: 10),
 
-                            // ── 4 profile chips in a 2×2 Wrap ──
                             Wrap(
                               spacing: 10,
                               runSpacing: 10,
@@ -258,58 +330,66 @@ class _RegisterPageState extends State<RegisterPage>
                                   label: 'Solo',
                                   icon: Icons.person_outline_rounded,
                                   isSelected: _selectedType == 'Solo',
-                                  onTap: () =>
-                                      setState(() => _selectedType = 'Solo'),
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Solo'),
                                 ),
                                 _ProfileChip(
                                   label: 'Family',
                                   icon: Icons.family_restroom_rounded,
-                                  isSelected: _selectedType == 'Family',
-                                  onTap: () =>
-                                      setState(() => _selectedType = 'Family'),
+                                  isSelected:
+                                      _selectedType == 'Family',
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Family'),
                                 ),
                                 _ProfileChip(
                                   label: 'Group',
                                   icon: Icons.group_outlined,
                                   isSelected: _selectedType == 'Group',
-                                  onTap: () =>
-                                      setState(() => _selectedType = 'Group'),
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Group'),
                                 ),
                                 _ProfileChip(
                                   label: 'Business',
-                                  icon: Icons.business_center_outlined,
-                                  isSelected: _selectedType == 'Business',
-                                  onTap: () =>
-                                      setState(() => _selectedType = 'Business'),
+                                  icon:
+                                      Icons.business_center_outlined,
+                                  isSelected:
+                                      _selectedType == 'Business',
+                                  onTap: () => setState(
+                                      () => _selectedType = 'Business'),
                                 ),
                               ],
                             ),
 
                             const SizedBox(height: 20),
 
-                            // Checkbox
+                            // ── Terms checkbox ─────────
                             GestureDetector(
-                              onTap: () =>
-                                  setState(() => _isChecked = !_isChecked),
+                              onTap: () => setState(
+                                  () => _isChecked = !_isChecked),
                               child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
+                                    duration: const Duration(
+                                        milliseconds: 200),
                                     width: 20, height: 20,
                                     decoration: BoxDecoration(
                                       color: _isChecked
                                           ? _indigo.withOpacity(0.2)
                                           : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(6),
+                                      borderRadius:
+                                          BorderRadius.circular(6),
                                       border: Border.all(
                                         color: _isChecked
                                             ? _indigo.withOpacity(0.6)
-                                            : Colors.white.withOpacity(0.2),
+                                            : Colors.white
+                                                .withOpacity(0.2),
                                       ),
                                     ),
                                     child: _isChecked
-                                        ? const Icon(Icons.check_rounded,
+                                        ? const Icon(
+                                            Icons.check_rounded,
                                             size: 13,
                                             color: Color(0xFF818CF8))
                                         : null,
@@ -322,20 +402,24 @@ class _RegisterPageState extends State<RegisterPage>
                                           fontFamily: 'Outfit',
                                           fontSize: 12,
                                           height: 1.5,
-                                          color: Colors.white.withOpacity(0.35),
+                                          color: Colors.white
+                                              .withOpacity(0.35),
                                         ),
                                         children: const [
-                                          TextSpan(text: 'I agree to the '),
+                                          TextSpan(
+                                              text: 'I agree to the '),
                                           TextSpan(
                                             text: 'Terms of Service',
                                             style: TextStyle(
-                                                color: Color(0xFF818CF8)),
+                                                color:
+                                                    Color(0xFF818CF8)),
                                           ),
                                           TextSpan(text: ' and '),
                                           TextSpan(
                                             text: 'Privacy Policy',
                                             style: TextStyle(
-                                                color: Color(0xFF818CF8)),
+                                                color:
+                                                    Color(0xFF818CF8)),
                                           ),
                                         ],
                                       ),
@@ -347,7 +431,7 @@ class _RegisterPageState extends State<RegisterPage>
 
                             const SizedBox(height: 24),
 
-                            // Register button
+                            // ── Register button ────────
                             _GradientButton(
                               label: 'Create account',
                               isLoading: _isLoading,
@@ -357,24 +441,29 @@ class _RegisterPageState extends State<RegisterPage>
 
                             const SizedBox(height: 18),
 
+                            // ── Sign in link ───────────
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
                               children: [
                                 Text(
                                   'Already have an account?',
                                   style: TextStyle(
                                     fontFamily: 'Outfit',
                                     fontSize: 12,
-                                    color: Colors.white.withOpacity(0.28),
+                                    color:
+                                        Colors.white.withOpacity(0.28),
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: () => Navigator.pop(context),
+                                  onPressed: () =>
+                                      Navigator.pop(context),
                                   style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.only(left: 4),
+                                      padding: const EdgeInsets.only(
+                                          left: 4),
                                       minimumSize: Size.zero,
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap),
+                                      tapTargetSize: MaterialTapTargetSize
+                                          .shrinkWrap),
                                   child: const Text(
                                     'Sign in',
                                     style: TextStyle(
@@ -407,11 +496,8 @@ class _RegisterPageState extends State<RegisterPage>
 class _Orb extends StatelessWidget {
   final double x, y, size;
   final Color color;
-  const _Orb(
-      {required this.x,
-      required this.y,
-      required this.size,
-      required this.color});
+  const _Orb({required this.x, required this.y,
+      required this.size, required this.color});
   @override
   Widget build(BuildContext context) {
     return Positioned(
@@ -420,7 +506,8 @@ class _Orb extends StatelessWidget {
         width: size, height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          gradient: RadialGradient(colors: [color, Colors.transparent]),
+          gradient:
+              RadialGradient(colors: [color, Colors.transparent]),
         ),
       ),
     );
@@ -441,7 +528,6 @@ class _GridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
     }
   }
-
   @override
   bool shouldRepaint(_) => false;
 }
@@ -487,28 +573,31 @@ class _StyledField extends StatelessWidget {
       obscureText: obscure,
       keyboardType: keyboardType,
       style: const TextStyle(
-          fontFamily: 'Outfit', fontSize: 13, color: Color(0xFFF8FAFC)),
+          fontFamily: 'Outfit',
+          fontSize: 13,
+          color: Color(0xFFF8FAFC)),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(
             fontFamily: 'Outfit',
             fontSize: 13,
             color: Colors.white.withOpacity(0.28)),
-        prefixIcon:
-            Icon(icon, size: 17, color: Colors.white.withOpacity(0.28)),
+        prefixIcon: Icon(icon,
+            size: 17, color: Colors.white.withOpacity(0.28)),
         suffixIcon: suffix,
         filled: true,
         fillColor: Colors.white.withOpacity(0.04),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        contentPadding: const EdgeInsets.symmetric(
+            horizontal: 14, vertical: 13),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide:
-              BorderSide(color: Colors.white.withOpacity(0.09), width: 1),
+          borderSide: BorderSide(
+              color: Colors.white.withOpacity(0.09), width: 1),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.2),
+          borderSide: const BorderSide(
+              color: Color(0xFF6366F1), width: 1.2),
         ),
       ),
     );
@@ -530,7 +619,6 @@ class _ProfileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Half the available width minus padding and half the spacing
     final chipWidth =
         (MediaQuery.of(context).size.width - 48 - 10) / 2;
 
@@ -555,24 +643,19 @@ class _ProfileChip extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isSelected
-                  ? const Color(0xFF818CF8)
-                  : Colors.white.withOpacity(0.3),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 12,
+            Icon(icon, size: 22,
                 color: isSelected
-                    ? const Color(0xFF818CF8).withOpacity(0.9)
-                    : Colors.white.withOpacity(0.35),
-              ),
-            ),
+                    ? const Color(0xFF818CF8)
+                    : Colors.white.withOpacity(0.3)),
+            const SizedBox(height: 6),
+            Text(label,
+                style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 12,
+                  color: isSelected
+                      ? const Color(0xFF818CF8).withOpacity(0.9)
+                      : Colors.white.withOpacity(0.35),
+                )),
           ],
         ),
       ),

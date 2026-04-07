@@ -197,8 +197,7 @@ class _RegisterPageState extends State<RegisterPage>
                                 fontFamily: 'Outfit',
                                 fontSize: 13,
                                 fontWeight: FontWeight.w300,
-                                color:
-                                    const Color(0xFFF8FAFC).withOpacity(0.35),
+                                color: const Color(0xFFF8FAFC).withOpacity(0.35),
                               ),
                             ),
 
@@ -250,30 +249,38 @@ class _RegisterPageState extends State<RegisterPage>
                             _FieldLabel(label: 'Profile type'),
                             const SizedBox(height: 10),
 
-                            Row(
+                            // ── 4 profile chips in a 2×2 Wrap ──
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
                               children: [
                                 _ProfileChip(
-                                  label: 'Student',
-                                  icon: Icons.school_outlined,
-                                  isSelected: _selectedType == 'Student',
-                                  onTap: () => setState(
-                                      () => _selectedType = 'Student'),
-                                ),
-                                const SizedBox(width: 10),
-                                _ProfileChip(
-                                  label: 'Employee',
-                                  icon: Icons.work_outline_rounded,
-                                  isSelected: _selectedType == 'Employee',
-                                  onTap: () => setState(
-                                      () => _selectedType = 'Employee'),
-                                ),
-                                const SizedBox(width: 10),
-                                _ProfileChip(
-                                  label: 'Other',
+                                  label: 'Solo',
                                   icon: Icons.person_outline_rounded,
-                                  isSelected: _selectedType == 'Other',
+                                  isSelected: _selectedType == 'Solo',
                                   onTap: () =>
-                                      setState(() => _selectedType = 'Other'),
+                                      setState(() => _selectedType = 'Solo'),
+                                ),
+                                _ProfileChip(
+                                  label: 'Family',
+                                  icon: Icons.family_restroom_rounded,
+                                  isSelected: _selectedType == 'Family',
+                                  onTap: () =>
+                                      setState(() => _selectedType = 'Family'),
+                                ),
+                                _ProfileChip(
+                                  label: 'Group',
+                                  icon: Icons.group_outlined,
+                                  isSelected: _selectedType == 'Group',
+                                  onTap: () =>
+                                      setState(() => _selectedType = 'Group'),
+                                ),
+                                _ProfileChip(
+                                  label: 'Business',
+                                  icon: Icons.business_center_outlined,
+                                  isSelected: _selectedType == 'Business',
+                                  onTap: () =>
+                                      setState(() => _selectedType = 'Business'),
                                 ),
                               ],
                             ),
@@ -288,15 +295,13 @@ class _RegisterPageState extends State<RegisterPage>
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 200),
+                                    duration: const Duration(milliseconds: 200),
                                     width: 20, height: 20,
                                     decoration: BoxDecoration(
                                       color: _isChecked
                                           ? _indigo.withOpacity(0.2)
                                           : Colors.transparent,
-                                      borderRadius:
-                                          BorderRadius.circular(6),
+                                      borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
                                         color: _isChecked
                                             ? _indigo.withOpacity(0.6)
@@ -317,8 +322,7 @@ class _RegisterPageState extends State<RegisterPage>
                                           fontFamily: 'Outfit',
                                           fontSize: 12,
                                           height: 1.5,
-                                          color: Colors.white
-                                              .withOpacity(0.35),
+                                          color: Colors.white.withOpacity(0.35),
                                         ),
                                         children: const [
                                           TextSpan(text: 'I agree to the '),
@@ -365,11 +369,9 @@ class _RegisterPageState extends State<RegisterPage>
                                   ),
                                 ),
                                 TextButton(
-                                  onPressed: () =>
-                                      Navigator.pop(context),
+                                  onPressed: () => Navigator.pop(context),
                                   style: TextButton.styleFrom(
-                                      padding:
-                                          const EdgeInsets.only(left: 4),
+                                      padding: const EdgeInsets.only(left: 4),
                                       minimumSize: Size.zero,
                                       tapTargetSize:
                                           MaterialTapTargetSize.shrinkWrap),
@@ -528,46 +530,50 @@ class _ProfileChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
+    // Half the available width minus padding and half the spacing
+    final chipWidth =
+        (MediaQuery.of(context).size.width - 48 - 10) / 2;
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: chipWidth,
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? const Color(0xFF6366F1).withOpacity(0.15)
+              : Colors.white.withOpacity(0.04),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
             color: isSelected
-                ? const Color(0xFF6366F1).withOpacity(0.15)
-                : Colors.white.withOpacity(0.04),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
+                ? const Color(0xFF6366F1).withOpacity(0.45)
+                : Colors.white.withOpacity(0.08),
+            width: isSelected ? 1.2 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 22,
               color: isSelected
-                  ? const Color(0xFF6366F1).withOpacity(0.45)
-                  : Colors.white.withOpacity(0.08),
-              width: isSelected ? 1.2 : 1,
+                  ? const Color(0xFF818CF8)
+                  : Colors.white.withOpacity(0.3),
             ),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                size: 20,
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 12,
                 color: isSelected
-                    ? const Color(0xFF818CF8)
-                    : Colors.white.withOpacity(0.3),
+                    ? const Color(0xFF818CF8).withOpacity(0.9)
+                    : Colors.white.withOpacity(0.35),
               ),
-              const SizedBox(height: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 11,
-                  color: isSelected
-                      ? const Color(0xFF818CF8).withOpacity(0.9)
-                      : Colors.white.withOpacity(0.35),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

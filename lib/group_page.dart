@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:image_picker/image_picker.dart';
 import 'services/group_service.dart';
 import 'create_group_page.dart';
+import 'group_details_page.dart';
 
 // ── Groups List Page ────────────────────────────────────────────────────────
 
@@ -63,6 +65,17 @@ class _GroupsPageState extends State<GroupsPage>
     }
   }
 
+  Color _groupColor(String name) {
+    final colors = [
+      const Color(0xFF6366F1),
+      const Color(0xFF8B5CF6),
+      const Color(0xFFEC4899),
+      const Color(0xFF14B8A6),
+      const Color(0xFFF59E0B),
+    ];
+    return colors[name.hashCode.abs() % colors.length];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -95,7 +108,7 @@ class _GroupsPageState extends State<GroupsPage>
               ),
               child: Column(
                 children: [
-                  // Top bar
+                  // ── Top bar ──────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
                     child: Row(
@@ -122,7 +135,6 @@ class _GroupsPageState extends State<GroupsPage>
                             ],
                           ),
                         ),
-                        // Create group button
                         GestureDetector(
                           onTap: () => Navigator.push(
                             context,
@@ -147,7 +159,7 @@ class _GroupsPageState extends State<GroupsPage>
 
                   const SizedBox(height: 14),
 
-                  // Groups list
+                  // ── Groups list ───────────────────────
                   Expanded(
                     child: StreamBuilder<QuerySnapshot>(
                       stream: GroupService.getUserGroups(),
@@ -213,17 +225,7 @@ class _GroupsPageState extends State<GroupsPage>
                             final initial = name.isNotEmpty
                                 ? name[0].toUpperCase()
                                 : 'G';
-
-                            // Color based on name hash
-                            final colors = [
-                              const Color(0xFF6366F1),
-                              const Color(0xFF8B5CF6),
-                              const Color(0xFFEC4899),
-                              const Color(0xFF14B8A6),
-                              const Color(0xFFF59E0B),
-                            ];
-                            final color =
-                                colors[name.hashCode % colors.length];
+                            final color = _groupColor(name);
 
                             return GestureDetector(
                               onTap: () => Navigator.push(
@@ -248,7 +250,6 @@ class _GroupsPageState extends State<GroupsPage>
                                       color: Colors.white.withOpacity(0.07)),
                                 ),
                                 child: Row(children: [
-                                  // Group avatar
                                   Container(
                                     width: 44, height: 44,
                                     decoration: BoxDecoration(
@@ -290,8 +291,8 @@ class _GroupsPageState extends State<GroupsPage>
                                           style: TextStyle(
                                             fontFamily: 'Outfit',
                                             fontSize: 12,
-                                            color:
-                                                Colors.white.withOpacity(0.35),
+                                            color: Colors.white
+                                                .withOpacity(0.35),
                                           ),
                                         ),
                                       ],
@@ -348,11 +349,25 @@ class _GroupChatPageState extends State<GroupChatPage> {
   final _msgController = TextEditingController();
   final _scrollController = ScrollController();
   bool _isSending = false;
+  late String _currentGroupName;
 
   static const _indigo = Color(0xFF6366F1);
   static const _bg = Color(0xFF0F1117);
 
   String get _myUid => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  @override
+  void initState() {
+    super.initState();
+    _currentGroupName = widget.groupName;
+  }
+
+  @override
+  void dispose() {
+    _msgController.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -369,28 +384,30 @@ class _GroupChatPageState extends State<GroupChatPage> {
   Future<void> _sendText() async {
     final text = _msgController.text.trim();
     if (text.isEmpty) return;
-
     _msgController.clear();
+    FocusScope.of(context).unfocus(); // ← dismiss keyboard on send
     setState(() => _isSending = true);
-
     await GroupService.sendMessage(groupId: widget.groupId, text: text);
-
     if (mounted) {
       setState(() => _isSending = false);
       _scrollToBottom();
     }
   }
 
+  // ── Fixed image send ───────────────────────────────────
   Future<void> _sendImage() async {
     try {
       final picker = ImagePicker();
-      final source = await showModalBottomSheet<ImageSource>(
+      ImageSource? source;
+
+      // ← use a variable to capture source, not return value
+      await showModalBottomSheet(
         context: context,
         backgroundColor: const Color(0xFF1A1D27),
         shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
-        builder: (_) => Padding(
+        builder: (sheetCtx) => Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -406,24 +423,34 @@ class _GroupChatPageState extends State<GroupChatPage> {
               _SourceTile(
                 icon: Icons.photo_library_outlined,
                 label: 'Choose from Gallery',
-                onTap: () => Navigator.pop(context, ImageSource.gallery),
+                onTap: () {
+                  source = ImageSource.gallery;
+                  Navigator.pop(sheetCtx); // ← use sheetCtx not context
+                },
               ),
               const SizedBox(height: 10),
               _SourceTile(
                 icon: Icons.camera_alt_outlined,
                 label: 'Take a Photo',
-                onTap: () => Navigator.pop(context, ImageSource.camera),
+                onTap: () {
+                  source = ImageSource.camera;
+                  Navigator.pop(sheetCtx); // ← use sheetCtx not context
+                },
               ),
             ],
           ),
         ),
       );
 
-      if (source == null) return;
+      // Sheet is now fully closed before we proceed
+      if (source == null || !mounted) return;
 
       final picked = await picker.pickImage(
-          source: source, imageQuality: 80, maxWidth: 1024);
-      if (picked == null) return;
+        source: source!,
+        imageQuality: 80,
+        maxWidth: 1024,
+      );
+      if (picked == null || !mounted) return;
 
       setState(() => _isSending = true);
       await GroupService.sendImage(
@@ -435,7 +462,36 @@ class _GroupChatPageState extends State<GroupChatPage> {
         _scrollToBottom();
       }
     } catch (e) {
+      debugPrint('Image send error: $e');
       if (mounted) setState(() => _isSending = false);
+    }
+  }
+
+  // ── Open group details ─────────────────────────────────
+  Future<void> _openDetails() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupDetailsPage(
+          groupId: widget.groupId,
+          groupName: _currentGroupName,
+          groupColor: widget.groupColor,
+          groupInitial: _currentGroupName.isNotEmpty
+              ? _currentGroupName[0].toUpperCase()
+              : 'G',
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    if (result is Map) {
+      if (result['action'] == 'renamed') {
+        setState(() => _currentGroupName = result['name'] as String);
+      } else if (result['action'] == 'deleted' ||
+          result['action'] == 'left') {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -483,16 +539,11 @@ class _GroupChatPageState extends State<GroupChatPage> {
   }
 
   @override
-  void dispose() {
-    _msgController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bg,
+      // ← KEY FIX: pushes input bar up when keyboard opens
+      resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
           CustomPaint(size: Size.infinite, painter: _GridPainter()),
@@ -534,242 +585,303 @@ class _GroupChatPageState extends State<GroupChatPage> {
                             color: widget.groupColor.withOpacity(0.3)),
                       ),
                       child: Center(
-                        child: Text(widget.groupInitial,
-                            style: TextStyle(
-                              fontFamily: 'Outfit',
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: widget.groupColor,
-                            )),
+                        child: Text(
+                          _currentGroupName.isNotEmpty
+                              ? _currentGroupName[0].toUpperCase()
+                              : 'G',
+                          style: TextStyle(
+                            fontFamily: 'Outfit',
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: widget.groupColor,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
-                      child: Text(widget.groupName,
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: Color(0xFFF8FAFC),
-                          )),
+                      child: GestureDetector(
+                        onTap: _openDetails,
+                        child: Row(children: [
+                          Flexible(
+                            child: Text(
+                              _currentGroupName,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFF8FAFC),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(Icons.keyboard_arrow_right_rounded,
+                              size: 16,
+                              color: Colors.white.withOpacity(0.3)),
+                        ]),
+                      ),
+                    ),
+                    GestureDetector(
+                      onTap: _openDetails,
+                      child: Container(
+                        width: 34, height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: Icon(Icons.info_outline_rounded,
+                            size: 16,
+                            color: Colors.white.withOpacity(0.45)),
+                      ),
                     ),
                   ]),
                 ),
 
                 // ── Messages ─────────────────────────────
                 Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: GroupService.getMessages(widget.groupId),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState ==
-                          ConnectionState.waiting) {
-                        return Center(
-                          child: CircularProgressIndicator(
-                            color: _indigo.withOpacity(0.7),
-                            strokeWidth: 2,
-                          ),
-                        );
-                      }
-
-                      final messages = snapshot.data?.docs ?? [];
-
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        if (_scrollController.hasClients) {
-                          _scrollController.jumpTo(
-                              _scrollController.position.maxScrollExtent);
+                  child: GestureDetector(
+                    // ← tap chat area to dismiss keyboard
+                    onTap: () => FocusScope.of(context).unfocus(),
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: GroupService.getMessages(widget.groupId),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                            child: CircularProgressIndicator(
+                              color: _indigo.withOpacity(0.7),
+                              strokeWidth: 2,
+                            ),
+                          );
                         }
-                      });
 
-                      if (messages.isEmpty) {
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.chat_bubble_outline_rounded,
-                                  size: 40,
-                                  color: Colors.white.withOpacity(0.1)),
-                              const SizedBox(height: 10),
-                              Text('No messages yet',
-                                  style: TextStyle(
-                                    fontFamily: 'Outfit',
-                                    fontSize: 14,
-                                    color: Colors.white.withOpacity(0.25),
-                                  )),
-                              Text('Say hello! 👋',
-                                  style: TextStyle(
-                                    fontFamily: 'Outfit',
-                                    fontSize: 12,
-                                    color: Colors.white.withOpacity(0.15),
-                                  )),
-                            ],
-                          ),
-                        );
-                      }
+                        final messages = snapshot.data?.docs ?? [];
 
-                      return ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-                        itemCount: messages.length,
-                        itemBuilder: (_, i) {
-                          final data =
-                              messages[i].data() as Map<String, dynamic>;
-                          final isMe = data['senderId'] == _myUid;
-                          final type = data['type'] as String? ?? 'text';
-                          final text = data['text'] as String? ?? '';
-                          final imageUrl = data['imageUrl'] as String?;
-                          final senderName =
-                              data['senderName'] as String? ?? '';
-                          final time = data['createdAt'];
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_scrollController.hasClients) {
+                            _scrollController.jumpTo(
+                                _scrollController
+                                    .position.maxScrollExtent);
+                          }
+                        });
 
-                          // Day divider
-                          final showDivider = i == 0 ||
-                              !_isSameDay(
-                                messages[i - 1].data() != null
-                                    ? (messages[i - 1].data()
-                                            as Map<String, dynamic>)['createdAt']
-                                    : null,
-                                time,
-                              );
+                        if (messages.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.chat_bubble_outline_rounded,
+                                    size: 40,
+                                    color: Colors.white.withOpacity(0.1)),
+                                const SizedBox(height: 10),
+                                Text('No messages yet',
+                                    style: TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 14,
+                                      color: Colors.white.withOpacity(0.25),
+                                    )),
+                                Text('Say hello! 👋',
+                                    style: TextStyle(
+                                      fontFamily: 'Outfit',
+                                      fontSize: 12,
+                                      color: Colors.white.withOpacity(0.15),
+                                    )),
+                              ],
+                            ),
+                          );
+                        }
 
-                          return Column(
-                            children: [
-                              if (showDivider) ...[
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 12),
-                                  child: Row(children: [
-                                    Expanded(
-                                        child: Divider(
-                                            color: Colors.white.withOpacity(0.08))),
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 10),
-                                      child: Text(_dayLabel(time),
-                                          style: TextStyle(
-                                            fontFamily: 'Outfit',
-                                            fontSize: 10,
-                                            color: Colors.white.withOpacity(0.25),
-                                          )),
-                                    ),
-                                    Expanded(
-                                        child: Divider(
-                                            color: Colors.white.withOpacity(0.08))),
-                                  ]),
+                        return ListView.builder(
+                          controller: _scrollController,
+                          padding:
+                              const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                          itemCount: messages.length,
+                          itemBuilder: (_, i) {
+                            final data = messages[i].data()
+                                as Map<String, dynamic>;
+                            final isMe = data['senderId'] == _myUid;
+                            final type =
+                                data['type'] as String? ?? 'text';
+                            final text = data['text'] as String? ?? '';
+                            final imageUrl =
+                                data['imageUrl'] as String?;
+                            final senderName =
+                                data['senderName'] as String? ?? '';
+                            final time = data['createdAt'];
+
+                            final showDivider = i == 0 ||
+                                !_isSameDay(
+                                  (messages[i - 1].data()
+                                      as Map<String,
+                                          dynamic>)['createdAt'],
+                                  time,
+                                );
+
+                            return Column(
+                              children: [
+                                if (showDivider)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    child: Row(children: [
+                                      Expanded(
+                                          child: Divider(
+                                              color: Colors.white
+                                                  .withOpacity(0.08))),
+                                      Padding(
+                                        padding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 10),
+                                        child: Text(_dayLabel(time),
+                                            style: TextStyle(
+                                              fontFamily: 'Outfit',
+                                              fontSize: 10,
+                                              color: Colors.white
+                                                  .withOpacity(0.25),
+                                            )),
+                                      ),
+                                      Expanded(
+                                          child: Divider(
+                                              color: Colors.white
+                                                  .withOpacity(0.08))),
+                                    ]),
+                                  ),
+                                _MessageBubble(
+                                  isMe: isMe,
+                                  senderName: senderName,
+                                  text: text,
+                                  imageUrl: imageUrl,
+                                  type: type,
+                                  time: _formatTime(time),
+                                  groupColor: widget.groupColor,
                                 ),
                               ],
-                              _MessageBubble(
-                                isMe: isMe,
-                                senderName: senderName,
-                                text: text,
-                                imageUrl: imageUrl,
-                                type: type,
-                                time: _formatTime(time),
-                                groupColor: widget.groupColor,
-                              ),
-                            ],
-                          );
-                        },
-                      );
-                    },
+                            );
+                          },
+                        );
+                      },
+                    ),
                   ),
                 ),
 
                 // ── Input bar ─────────────────────────────
                 Container(
-                  padding: EdgeInsets.fromLTRB(
-                      12,
-                      10,
-                      12,
-                      MediaQuery.of(context).viewInsets.bottom + 10),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.025),
+                    color: const Color(0xFF13151F),
                     border: Border(
                         top: BorderSide(
                             color: Colors.white.withOpacity(0.07))),
                   ),
-                  child: Row(children: [
-                    // Image button
-                    GestureDetector(
-                      onTap: _isSending ? null : _sendImage,
-                      child: Container(
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.05),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.08)),
-                        ),
-                        child: Icon(Icons.image_outlined,
-                            size: 18,
-                            color: Colors.white.withOpacity(0.4)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Text input
-                    Expanded(
-                      child: Container(
-                        constraints: const BoxConstraints(maxHeight: 120),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.04),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.09)),
-                        ),
-                        child: TextField(
-                          controller: _msgController,
-                          maxLines: null,
-                          textCapitalization:
-                              TextCapitalization.sentences,
-                          style: const TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 14,
-                            color: Color(0xFFF8FAFC),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Image button
+                      GestureDetector(
+                        onTap: _isSending ? null : _sendImage,
+                        child: Container(
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.08)),
                           ),
-                          decoration: InputDecoration(
-                            hintText: 'Message...',
-                            hintStyle: TextStyle(
+                          child: Icon(Icons.image_outlined,
+                              size: 18,
+                              color: Colors.white.withOpacity(0.4)),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Text input
+                      Expanded(
+                        child: ConstrainedBox(
+                          constraints:
+                              const BoxConstraints(maxHeight: 120),
+                          child: TextField(
+                            controller: _msgController,
+                            maxLines: null,
+                            textCapitalization:
+                                TextCapitalization.sentences,
+                            textInputAction: TextInputAction.send,
+                            style: const TextStyle(
                               fontFamily: 'Outfit',
                               fontSize: 14,
-                              color: Colors.white.withOpacity(0.25),
+                              color: Color(0xFFF8FAFC),
                             ),
-                            border: InputBorder.none,
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 10),
+                            onSubmitted: (_) => _sendText(),
+                            decoration: InputDecoration(
+                              hintText: 'Message...',
+                              hintStyle: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.25),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(0.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                    color:
+                                        Colors.white.withOpacity(0.08)),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(22),
+                                borderSide: BorderSide(
+                                    color: _indigo.withOpacity(0.4),
+                                    width: 1.2),
+                              ),
+                              contentPadding:
+                                  const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 10),
+                            ),
                           ),
-                          onSubmitted: (_) => _sendText(),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    // Send button
-                    GestureDetector(
-                      onTap: _isSending ? null : _sendText,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 40, height: 40,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: _indigo.withOpacity(0.3),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
+                      const SizedBox(width: 8),
+
+                      // Send button
+                      GestureDetector(
+                        onTap: _isSending ? null : _sendText,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 40, height: 40,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [
+                                Color(0xFF6366F1),
+                                Color(0xFF8B5CF6)
+                              ],
                             ),
-                          ],
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _indigo.withOpacity(0.3),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
+                          child: _isSending
+                              ? const Padding(
+                                  padding: EdgeInsets.all(11),
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2))
+                              : const Icon(Icons.send_rounded,
+                                  size: 16, color: Colors.white),
                         ),
-                        child: _isSending
-                            ? const Padding(
-                                padding: EdgeInsets.all(11),
-                                child: CircularProgressIndicator(
-                                    color: Colors.white, strokeWidth: 2))
-                            : const Icon(Icons.send_rounded,
-                                size: 16, color: Colors.white),
                       ),
-                    ),
-                  ]),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -817,8 +929,7 @@ class _MessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: groupColor.withOpacity(0.15),
                 shape: BoxShape.circle,
-                border:
-                    Border.all(color: groupColor.withOpacity(0.3)),
+                border: Border.all(color: groupColor.withOpacity(0.3)),
               ),
               child: Center(
                 child: Text(
@@ -879,10 +990,8 @@ class _MessageBubble extends StatelessWidget {
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(15),
                             topRight: const Radius.circular(15),
-                            bottomLeft:
-                                Radius.circular(isMe ? 15 : 3),
-                            bottomRight:
-                                Radius.circular(isMe ? 3 : 15),
+                            bottomLeft: Radius.circular(isMe ? 15 : 3),
+                            bottomRight: Radius.circular(isMe ? 3 : 15),
                           ),
                           child: Image.network(
                             imageUrl!,
@@ -918,7 +1027,8 @@ class _MessageBubble extends StatelessWidget {
                 ),
 
                 Padding(
-                  padding: const EdgeInsets.only(top: 3, left: 4, right: 4),
+                  padding:
+                      const EdgeInsets.only(top: 3, left: 4, right: 4),
                   child: Text(time,
                       style: TextStyle(
                         fontFamily: 'Outfit',
@@ -950,13 +1060,11 @@ class _SourceTile extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(12),
-          border:
-              Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
         child: Row(children: [
           Icon(icon, size: 18, color: Colors.white.withOpacity(0.6)),

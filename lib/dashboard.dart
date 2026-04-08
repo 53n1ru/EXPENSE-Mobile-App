@@ -3,9 +3,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'services/expense_service.dart';
 import 'services/user_service.dart';
+import 'services/account_service.dart';
 import 'add_expenses.dart';
 import 'analysis.dart';
 import 'history_page.dart';
+import 'location_map_page.dart';
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
@@ -30,6 +32,12 @@ class _DashboardPageState extends State<DashboardPage>
   double _totalIncome = 0;
   List<Map<String, dynamic>> _recentExpenses = [];
   bool _isLoading = true;
+
+  // ── Account dropdown state ─────────────────────────────
+  List<Map<String, dynamic>> _accounts = [];
+  String _selectedAccountId = '';
+  String _selectedAccountName = 'Solo';
+  bool _accountsLoadingDropdown = true;
 
   @override
   void initState() {
@@ -58,8 +66,10 @@ class _DashboardPageState extends State<DashboardPage>
     super.dispose();
   }
 
+  // ── Load all data ──────────────────────────────────────
   Future<void> _loadData() async {
     await _loadUserName();
+    await _loadAccountsForDropdown();
     await _loadExpenses();
   }
 
@@ -85,11 +95,54 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
+  // ── Load accounts for dropdown ─────────────────────────
+  Future<void> _loadAccountsForDropdown() async {
+    try {
+      final snapshot = await AccountService.getAccounts().first;
+      final accounts = snapshot.docs.map((doc) {
+        final data = doc.data() as Map<String, dynamic>;
+        return {
+          'id': doc.id,
+          'name': data['name'] ?? '',
+          'type': data['type'] ?? 'Solo',
+        };
+      }).toList();
+
+      if (mounted) {
+        // Default to Solo account
+        final solo = accounts.firstWhere(
+          (a) => a['type'] == 'Solo',
+          orElse: () => accounts.isNotEmpty
+              ? accounts.first
+              : {'id': '', 'name': 'All', 'type': 'Solo'},
+        );
+
+        setState(() {
+          _accounts = accounts;
+          // Only update selection if not already set
+          if (_selectedAccountId.isEmpty) {
+            _selectedAccountId = solo['id'] as String;
+            _selectedAccountName = solo['name'] as String;
+          }
+          _accountsLoadingDropdown = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading accounts dropdown: $e');
+      if (mounted) setState(() => _accountsLoadingDropdown = false);
+    }
+  }
+
+  // ── Load expenses filtered by selected account ─────────
   Future<void> _loadExpenses() async {
     try {
-      final snapshot = await ExpenseService.getMonthlyExpenses().first;
-      final docs = snapshot.docs;
+      final snapshot = _selectedAccountId.isEmpty
+          ? await ExpenseService.getMonthlyExpenses().first
+          : await AccountService.getAccountMonthlyExpenses(
+                  _selectedAccountId)
+              .first;
 
+      final docs = snapshot.docs;
       double spent = 0;
       double income = 0;
       List<Map<String, dynamic>> expenses = [];
@@ -162,6 +215,20 @@ class _DashboardPageState extends State<DashboardPage>
     ).then((_) {
       if (reload) _loadData();
     });
+  }
+
+  // ── Account type icon ──────────────────────────────────
+  IconData _accountIcon(String type) {
+    switch (type) {
+      case 'Family':
+        return Icons.family_restroom_rounded;
+      case 'Group':
+        return Icons.group_outlined;
+      case 'Business':
+        return Icons.business_center_outlined;
+      default:
+        return Icons.person_outline_rounded;
+    }
   }
 
   @override
@@ -249,7 +316,9 @@ class _DashboardPageState extends State<DashboardPage>
                                 ),
                               ),
                               Text(
-                                _userName.isEmpty ? 'Loading...' : _userName,
+                                _userName.isEmpty
+                                    ? 'Loading...'
+                                    : _userName,
                                 style: const TextStyle(
                                   fontFamily: 'Outfit',
                                   fontSize: 15,
@@ -278,7 +347,115 @@ class _DashboardPageState extends State<DashboardPage>
                     ),
                   ),
 
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 10),
+
+                  // ── Account dropdown ──────────────────
+                  if (!_accountsLoadingDropdown && _accounts.length > 1)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                      child: Container(
+                        height: 42,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.04),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.08)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedAccountId.isEmpty
+                                ? null
+                                : _selectedAccountId,
+                            icon: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white.withOpacity(0.3),
+                                size: 18),
+                            dropdownColor: const Color(0xFF1A1D27),
+                            isExpanded: true,
+                            style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                color: Color(0xFFF8FAFC)),
+                            items: _accounts.map((acc) {
+                              final type = acc['type'] as String;
+                              return DropdownMenuItem<String>(
+                                value: acc['id'] as String,
+                                child: Row(children: [
+                                  Icon(
+                                    _accountIcon(type),
+                                    size: 15,
+                                    color: const Color(0xFF818CF8)
+                                        .withOpacity(0.7),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(acc['name'] as String,
+                                      style: const TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13,
+                                          color: Color(0xFFF8FAFC))),
+                                  const SizedBox(width: 6),
+                                  Text('· $type',
+                                      style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 11,
+                                          color: Colors.white
+                                              .withOpacity(0.35))),
+                                ]),
+                              );
+                            }).toList(),
+                            onChanged: (id) {
+                              if (id == null) return;
+                              final acc = _accounts
+                                  .firstWhere((a) => a['id'] == id);
+                              setState(() {
+                                _selectedAccountId = id;
+                                _selectedAccountName =
+                                    acc['name'] as String;
+                                _isLoading = true;
+                              });
+                              _loadExpenses();
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // ── Account badge (single account) ────
+                  if (!_accountsLoadingDropdown && _accounts.length == 1)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                      child: Row(children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: _indigo.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: _indigo.withOpacity(0.2)),
+                          ),
+                          child: Row(children: [
+                            Icon(_accountIcon(
+                                _accounts.first['type'] as String),
+                                size: 12,
+                                color: const Color(0xFF818CF8)
+                                    .withOpacity(0.7)),
+                            const SizedBox(width: 5),
+                            Text(
+                              _accounts.first['name'] as String,
+                              style: TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 11,
+                                color: Colors.white.withOpacity(0.5),
+                              ),
+                            ),
+                          ]),
+                        ),
+                      ]),
+                    ),
+
+                  const SizedBox(height: 4),
 
                   // ── Body ─────────────────────────────
                   Expanded(
@@ -294,10 +471,13 @@ class _DashboardPageState extends State<DashboardPage>
                             backgroundColor: const Color(0xFF1A1D27),
                             onRefresh: _loadData,
                             child: SingleChildScrollView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                              physics:
+                                  const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 0, 16, 16),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
                                   // ── Stat cards ───────
                                   Row(children: [
@@ -313,21 +493,25 @@ class _DashboardPageState extends State<DashboardPage>
                                         subColor: remaining >= 0
                                             ? const Color(0xFF5DCAA5)
                                             : const Color(0xFFF09595),
-                                        valueColor: const Color(0xFFF8FAFC),
+                                        valueColor:
+                                            const Color(0xFFF8FAFC),
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
                                       child: _StatCard(
                                         label: 'This Month Income',
-                                        value: _formatAmount(_totalIncome),
+                                        value:
+                                            _formatAmount(_totalIncome),
                                         sub: _totalIncome == 0
                                             ? 'Tap + to add income'
                                             : '${((remaining / _totalIncome) * 100).clamp(0, 100).toStringAsFixed(0)}% remaining',
                                         subColor: _totalIncome == 0
-                                            ? const Color(0xFF818CF8).withOpacity(0.5)
+                                            ? const Color(0xFF818CF8)
+                                                .withOpacity(0.5)
                                             : const Color(0xFF818CF8),
-                                        valueColor: const Color(0xFF818CF8),
+                                        valueColor:
+                                            const Color(0xFF818CF8),
                                       ),
                                     ),
                                   ]),
@@ -337,7 +521,8 @@ class _DashboardPageState extends State<DashboardPage>
                                   // ── Budget bar ────────
                                   Column(children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
                                           _totalIncome == 0
@@ -346,7 +531,8 @@ class _DashboardPageState extends State<DashboardPage>
                                           style: TextStyle(
                                             fontFamily: 'Outfit',
                                             fontSize: 10,
-                                            color: Colors.white.withOpacity(0.35),
+                                            color: Colors.white
+                                                .withOpacity(0.35),
                                           ),
                                         ),
                                         GestureDetector(
@@ -368,7 +554,8 @@ class _DashboardPageState extends State<DashboardPage>
                                             if (_totalIncome == 0) ...[
                                               const SizedBox(width: 3),
                                               const Icon(
-                                                Icons.add_circle_outline_rounded,
+                                                Icons
+                                                    .add_circle_outline_rounded,
                                                 size: 11,
                                                 color: Color(0xFF818CF8),
                                               ),
@@ -379,27 +566,33 @@ class _DashboardPageState extends State<DashboardPage>
                                     ),
                                     const SizedBox(height: 6),
                                     ClipRRect(
-                                      borderRadius: BorderRadius.circular(100),
+                                      borderRadius:
+                                          BorderRadius.circular(100),
                                       child: LinearProgressIndicator(
                                         value: budgetPct,
                                         minHeight: 6,
-                                        backgroundColor: Colors.white.withOpacity(0.07),
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        backgroundColor: Colors.white
+                                            .withOpacity(0.07),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           budgetPct > 0.8
                                               ? const Color(0xFFF09595)
                                               : _indigo,
                                         ),
                                       ),
                                     ),
-                                    if (_totalIncome > 0 || _totalSpent > 0) ...[
+                                    if (_totalIncome > 0 ||
+                                        _totalSpent > 0) ...[
                                       const SizedBox(height: 8),
                                       Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
                                         children: [
                                           Row(children: [
                                             Container(
                                               width: 6, height: 6,
-                                              decoration: const BoxDecoration(
+                                              decoration:
+                                                  const BoxDecoration(
                                                 color: Color(0xFF5DCAA5),
                                                 shape: BoxShape.circle,
                                               ),
@@ -410,14 +603,16 @@ class _DashboardPageState extends State<DashboardPage>
                                               style: TextStyle(
                                                 fontFamily: 'Outfit',
                                                 fontSize: 10,
-                                                color: Colors.white.withOpacity(0.35),
+                                                color: Colors.white
+                                                    .withOpacity(0.35),
                                               ),
                                             ),
                                           ]),
                                           Row(children: [
                                             Container(
                                               width: 6, height: 6,
-                                              decoration: const BoxDecoration(
+                                              decoration:
+                                                  const BoxDecoration(
                                                 color: Color(0xFFF09595),
                                                 shape: BoxShape.circle,
                                               ),
@@ -428,7 +623,8 @@ class _DashboardPageState extends State<DashboardPage>
                                               style: TextStyle(
                                                 fontFamily: 'Outfit',
                                                 fontSize: 10,
-                                                color: Colors.white.withOpacity(0.35),
+                                                color: Colors.white
+                                                    .withOpacity(0.35),
                                               ),
                                             ),
                                           ]),
@@ -458,7 +654,8 @@ class _DashboardPageState extends State<DashboardPage>
                                         icon: Icons.history_rounded,
                                         label: 'History',
                                         color: const Color(0xFF5DCAA5),
-                                        onTap: () => _navigate(const HistoryPage()),
+                                        onTap: () => _navigate(
+                                            const HistoryPage()),
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -467,7 +664,8 @@ class _DashboardPageState extends State<DashboardPage>
                                         icon: Icons.bar_chart_rounded,
                                         label: 'Analytics',
                                         color: const Color(0xFFEC4899),
-                                        onTap: () => _navigate(const AnalysisPage()),
+                                        onTap: () => _navigate(
+                                            const AnalysisPage()),
                                       ),
                                     ),
                                   ]),
@@ -476,23 +674,46 @@ class _DashboardPageState extends State<DashboardPage>
 
                                   // ── Expense history ───
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(
-                                        'Expense History',
-                                        style: TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFFF8FAFC),
-                                        ),
+                                      // Account name label
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Expense History',
+                                            style: TextStyle(
+                                              fontFamily: 'Outfit',
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color(0xFFF8FAFC),
+                                            ),
+                                          ),
+                                          if (_selectedAccountName
+                                              .isNotEmpty)
+                                            Text(
+                                              _selectedAccountName,
+                                              style: TextStyle(
+                                                fontFamily: 'Outfit',
+                                                fontSize: 10,
+                                                color: const Color(
+                                                        0xFF818CF8)
+                                                    .withOpacity(0.6),
+                                              ),
+                                            ),
+                                        ],
                                       ),
                                       TextButton(
-                                        onPressed: () => _navigate(const HistoryPage()),
+                                        onPressed: () =>
+                                            _navigate(const HistoryPage()),
                                         style: TextButton.styleFrom(
                                           padding: EdgeInsets.zero,
                                           minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          tapTargetSize:
+                                              MaterialTapTargetSize
+                                                  .shrinkWrap,
                                         ),
                                         child: const Text(
                                           'See all →',
@@ -517,7 +738,8 @@ class _DashboardPageState extends State<DashboardPage>
                                         )
                                       : Column(
                                           children: _recentExpenses
-                                              .map((e) => _ExpenseItem(expense: e))
+                                              .map((e) =>
+                                                  _ExpenseItem(expense: e))
                                               .toList(),
                                         ),
 
@@ -534,7 +756,9 @@ class _DashboardPageState extends State<DashboardPage>
                                     ),
                                   ),
                                   const SizedBox(height: 10),
-                                  _LovedOnesCard(onTap: () {}),
+                                  _LovedOnesCard(
+  onTap: () => _navigate(const LocationMapPage()),
+),
                                 ],
                               ),
                             ),
@@ -658,6 +882,11 @@ class _ExpenseItem extends StatelessWidget {
     'Health': Icons.favorite_border_rounded,
     'Shopping': Icons.shopping_bag_outlined,
     'Education': Icons.school_outlined,
+    'Salary': Icons.account_balance_wallet_outlined,
+    'Freelance': Icons.laptop_outlined,
+    'Business': Icons.storefront_outlined,
+    'Gift': Icons.card_giftcard_outlined,
+    'Interest': Icons.trending_up_rounded,
     'Other': Icons.more_horiz_rounded,
   };
 
@@ -669,6 +898,11 @@ class _ExpenseItem extends StatelessWidget {
     'Health': Color(0xFFF09595),
     'Shopping': Color(0xFFA855F7),
     'Education': Color(0xFF14B8A6),
+    'Salary': Color(0xFF5DCAA5),
+    'Freelance': Color(0xFF818CF8),
+    'Business': Color(0xFFF59E0B),
+    'Gift': Color(0xFFEC4899),
+    'Interest': Color(0xFF14B8A6),
     'Other': Color(0xFF888780),
   };
 
@@ -682,7 +916,8 @@ class _ExpenseItem extends StatelessWidget {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+      padding:
+          const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(13),

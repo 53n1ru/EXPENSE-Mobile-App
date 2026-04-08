@@ -8,8 +8,7 @@ class AuthService {
 
   static User? get currentUser => _auth.currentUser;
   static String? get currentUserId => _auth.currentUser?.uid;
-  static Stream<User?> get authStateChanges =>
-      _auth.authStateChanges();
+  static Stream<User?> get authStateChanges => _auth.authStateChanges();
 
   // ── Register ───────────────────────────────────────────
   static Future<String?> register({
@@ -18,33 +17,37 @@ class AuthService {
     required String password,
   }) async {
     try {
-      final credential =
-          await _auth.createUserWithEmailAndPassword(
+      final credential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      await credential.user?.updateDisplayName(name);
+      // ← store user in variable so we can use uid
+      final user = credential.user;
+      if (user == null) return 'Registration failed';
 
-      // Save user profile
+      await user.updateDisplayName(name);
+
+      // ── Save user profile ──────────────────────────────
       await UserService.createUser(
-        userId: credential.user!.uid,
+        userId: user.uid,
         name: name,
         email: email.trim().toLowerCase(),
       );
 
-      // ✅ Auto-create default Solo account
-      await FirebaseFirestore.instance
-          .collection('accounts')
-          .add({
-        'userId': credential.user!.uid,
+      // ── Auto-create default Solo account ──────────────
+      // members includes owner uid so getAccounts() works for them
+      await FirebaseFirestore.instance.collection('accounts').add({
+        'userId': user.uid,
         'name': 'Personal',
         'type': 'Solo',
         'color': '0xFF6366F1',
+        'members': [user.uid], // ← owner always in members array
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      return null;
+      return null; // null = success
+
     } on FirebaseAuthException catch (e) {
       debugPrint('Auth error: ${e.code}');
       return _authError(e.code);

@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'services/auth_service.dart';
 import 'services/account_service.dart';
 import 'create_account_page.dart';
+import 'group_account_dashboard_page.dart';
 import 'main.dart';
 
 class ProfilePage extends StatefulWidget {
@@ -50,9 +51,7 @@ class _ProfilePageState extends State<ProfilePage>
   List<Map<String, dynamic>> get _filtered =>
       _activeFilter == 'All'
           ? _accounts
-          : _accounts
-              .where((a) => a['type'] == _activeFilter)
-              .toList();
+          : _accounts.where((a) => a['type'] == _activeFilter).toList();
 
   String get _initials {
     final parts = _name.trim().split(' ');
@@ -81,11 +80,9 @@ class _ProfilePageState extends State<ProfilePage>
       vsync: this, duration: const Duration(milliseconds: 350),
     );
 
-    _fadeAnim = CurvedAnimation(
-        parent: _fadeController, curve: Curves.easeOut);
+    _fadeAnim = CurvedAnimation(parent: _fadeController, curve: Curves.easeOut);
     _slideAnim = Tween<double>(begin: 16, end: 0).animate(
-      CurvedAnimation(
-          parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
     _editPanelAnim = CurvedAnimation(
       parent: _editPanelController,
@@ -109,12 +106,10 @@ class _ProfilePageState extends State<ProfilePage>
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
-
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
           .get();
-
       if (doc.exists && mounted) {
         final data = doc.data()!;
         setState(() {
@@ -145,7 +140,6 @@ class _ProfilePageState extends State<ProfilePage>
           'active': true,
         };
       }).toList();
-
       if (mounted) {
         setState(() {
           _accounts = accounts;
@@ -168,16 +162,81 @@ class _ProfilePageState extends State<ProfilePage>
 
   IconData _iconFromType(String type) {
     switch (type) {
-      case 'Family':
-        return Icons.family_restroom_rounded;
-      case 'Group':
-        return Icons.group_outlined;
-      case 'Business':
-        return Icons.business_center_outlined;
-      default:
-        return Icons.person_outline_rounded;
+      case 'Family': return Icons.family_restroom_rounded;
+      case 'Group': return Icons.group_outlined;
+      case 'Business': return Icons.business_center_outlined;
+      default: return Icons.person_outline_rounded;
     }
   }
+
+  // ── Open account dashboard ─────────────────────────────
+  void _openAccountDashboard(Map<String, dynamic> account) {
+    final type = account['type'] as String? ?? 'Solo';
+    if (type == 'Solo') {
+      _showSnack('Solo account is managed from the main dashboard',
+          isError: false);
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GroupAccountDashboardPage(
+          accountId: account['id'] as String,
+          accountName: account['name'] as String,
+          accountType: type,
+          accountColor: account['color'] as Color,
+        ),
+      ),
+    ).then((_) => _loadAccounts());
+  }
+
+  // ╔══════════════════════════════════════════════════════════════╗
+  // ║  🔧 ONE-TIME FIX — DELETE THIS METHOD AFTER RUNNING ONCE   ║
+  // ║  Search for "FIX_BUTTON" to find the button in build()     ║
+  // ╚══════════════════════════════════════════════════════════════╝
+  Future<void> _fixAllAccountMembers() async {
+    try {
+      final db = FirebaseFirestore.instance;
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      if (uid.isEmpty) {
+        debugPrint('❌ No user logged in');
+        return;
+      }
+
+      debugPrint('🔧 Starting fix for user: $uid');
+
+      // ← Only query accounts owned by THIS user — avoids permission error
+      final accounts = await db
+          .collection('accounts')
+          .where('userId', isEqualTo: uid)
+          .get();
+
+      debugPrint('📦 Found ${accounts.docs.length} accounts to check');
+
+      int fixed = 0;
+      for (final doc in accounts.docs) {
+        final data = doc.data();
+        final userId = data['userId'] as String? ?? '';
+        final members = List<String>.from(data['members'] ?? []);
+
+        if (userId.isNotEmpty && !members.contains(userId)) {
+          await doc.reference.update({
+            'members': FieldValue.arrayUnion([userId]),
+          });
+          debugPrint('✅ Fixed: ${doc.id} — added $userId to members');
+          fixed++;
+        } else {
+          debugPrint('⏭ Skipped: ${doc.id} — already has owner in members');
+        }
+      }
+      debugPrint('🎉 Done! Fixed $fixed out of ${accounts.docs.length} accounts.');
+    } catch (e) {
+      debugPrint('❌ Fix failed: $e');
+    }
+  }
+  // ╔══════════════════════════════════════════════════════════════╗
+  // ║  🔧 END OF ONE-TIME FIX METHOD — DELETE ABOVE METHOD       ║
+  // ╚══════════════════════════════════════════════════════════════╝
 
   void _openEditPanel() {
     _nameEditController.text = _name;
@@ -195,9 +254,7 @@ class _ProfilePageState extends State<ProfilePage>
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
-        source: source,
-        imageQuality: 85,
-        maxWidth: 512,
+        source: source, imageQuality: 85, maxWidth: 512,
       );
       if (picked != null && mounted) {
         setState(() => _avatarFile = File(picked.path));
@@ -214,7 +271,7 @@ class _ProfilePageState extends State<ProfilePage>
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => Padding(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -229,28 +286,20 @@ class _ProfilePageState extends State<ProfilePage>
             ),
             Text('CHOOSE PHOTO',
                 style: TextStyle(
-                  fontFamily: 'SpaceMono',
-                  fontSize: 9,
-                  letterSpacing: 2,
-                  color: _indigo.withOpacity(0.6),
+                  fontFamily: 'SpaceMono', fontSize: 9,
+                  letterSpacing: 2, color: _indigo.withOpacity(0.6),
                 )),
             const SizedBox(height: 16),
             _SheetOption(
               icon: Icons.photo_library_outlined,
               label: 'Choose from Gallery',
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.gallery);
-              },
+              onTap: () { Navigator.pop(sheetCtx); _pickImage(ImageSource.gallery); },
             ),
             const SizedBox(height: 10),
             _SheetOption(
               icon: Icons.camera_alt_outlined,
               label: 'Take a Photo',
-              onTap: () {
-                Navigator.pop(context);
-                _pickImage(ImageSource.camera);
-              },
+              onTap: () { Navigator.pop(sheetCtx); _pickImage(ImageSource.camera); },
             ),
             if (_avatarFile != null || _avatarUrl.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -259,11 +308,8 @@ class _ProfilePageState extends State<ProfilePage>
                 label: 'Remove Photo',
                 isDestructive: true,
                 onTap: () {
-                  setState(() {
-                    _avatarFile = null;
-                    _avatarUrl = '';
-                  });
-                  Navigator.pop(context);
+                  setState(() { _avatarFile = null; _avatarUrl = ''; });
+                  Navigator.pop(sheetCtx);
                 },
               ),
             ],
@@ -279,26 +325,17 @@ class _ProfilePageState extends State<ProfilePage>
       _showSnack('Name cannot be empty', isError: true);
       return;
     }
-
     setState(() => _isSaving = true);
-
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) return;
-
       String? uploadedUrl;
-
       if (_avatarFile != null) {
         try {
           final ref = FirebaseStorage.instance
-              .ref()
-              .child('avatars')
-              .child('${user.uid}.jpg');
-
+              .ref().child('avatars').child('${user.uid}.jpg');
           final snapshot = await ref.putFile(
-            _avatarFile!,
-            SettableMetadata(contentType: 'image/jpeg'),
-          );
+            _avatarFile!, SettableMetadata(contentType: 'image/jpeg'));
           uploadedUrl = await snapshot.ref.getDownloadURL();
         } catch (e) {
           debugPrint('Image upload failed: $e');
@@ -307,25 +344,16 @@ class _ProfilePageState extends State<ProfilePage>
           return;
         }
       }
-
       final updateData = <String, dynamic>{'name': newName};
       if (uploadedUrl != null) updateData['avatarUrl'] = uploadedUrl;
       if (_avatarUrl.isEmpty && _avatarFile == null) updateData['avatarUrl'] = '';
-
       await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update(updateData);
-
+          .collection('users').doc(user.uid).update(updateData);
       await user.updateDisplayName(newName);
-
       if (mounted) {
         setState(() {
           _name = newName;
-          if (uploadedUrl != null) {
-            _avatarUrl = uploadedUrl;
-            _avatarFile = null;
-          }
+          if (uploadedUrl != null) { _avatarUrl = uploadedUrl; _avatarFile = null; }
           _isSaving = false;
         });
         _closeEditPanel();
@@ -347,28 +375,16 @@ class _ProfilePageState extends State<ProfilePage>
         backgroundColor: const Color(0xFF1A1D27),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Sign Out',
-            style: TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: Color(0xFFF8FAFC),
-            )),
-        content: Text(
-          'Are you sure you want to sign out?',
-          style: TextStyle(
-            fontFamily: 'Outfit',
-            fontSize: 13,
-            color: Colors.white.withOpacity(0.5),
-          ),
-        ),
+            style: TextStyle(fontFamily: 'Outfit', fontSize: 16,
+                fontWeight: FontWeight.w600, color: Color(0xFFF8FAFC))),
+        content: Text('Are you sure you want to sign out?',
+            style: TextStyle(fontFamily: 'Outfit', fontSize: 13,
+                color: Colors.white.withOpacity(0.5))),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  color: Colors.white.withOpacity(0.4),
-                )),
+            child: Text('Cancel', style: TextStyle(
+                fontFamily: 'Outfit', color: Colors.white.withOpacity(0.4))),
           ),
           GestureDetector(
             onTap: () async {
@@ -386,16 +402,11 @@ class _ProfilePageState extends State<ProfilePage>
               decoration: BoxDecoration(
                 color: const Color(0xFFE24B4A).withOpacity(0.15),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                    color: const Color(0xFFE24B4A).withOpacity(0.4)),
+                border: Border.all(color: const Color(0xFFE24B4A).withOpacity(0.4)),
               ),
               child: const Text('Sign Out',
-                  style: TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFFF09595),
-                  )),
+                  style: TextStyle(fontFamily: 'Outfit', fontSize: 13,
+                      fontWeight: FontWeight.w600, color: Color(0xFFF09595))),
             ),
           ),
         ],
@@ -432,7 +443,6 @@ class _ProfilePageState extends State<ProfilePage>
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          // ── Orbs ──────────────────────────────────────
           AnimatedBuilder(
             animation: _orbController,
             builder: (_, __) {
@@ -447,7 +457,6 @@ class _ProfilePageState extends State<ProfilePage>
               ]);
             },
           ),
-
           CustomPaint(size: Size.infinite, painter: _GridPainter()),
 
           SafeArea(
@@ -485,47 +494,32 @@ class _ProfilePageState extends State<ProfilePage>
                                 : const SizedBox(width: 36),
                           ),
                         ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('EXPENSES',
-                                style: TextStyle(
-                                  fontFamily: 'SpaceMono',
-                                  fontSize: 8,
-                                  letterSpacing: 2.5,
-                                  color: _indigo.withOpacity(0.6),
-                                )),
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 200),
-                              child: Text(
-                                _editMode ? 'Edit Profile' : 'Profile',
-                                key: ValueKey(_editMode),
-                                style: const TextStyle(
-                                  fontFamily: 'Outfit',
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: -0.3,
-                                  color: Color(0xFFF8FAFC),
-                                ),
-                              ),
+                        Column(mainAxisSize: MainAxisSize.min, children: [
+                          Text('EXPENSES',
+                              style: TextStyle(fontFamily: 'SpaceMono',
+                                  fontSize: 8, letterSpacing: 2.5,
+                                  color: _indigo.withOpacity(0.6))),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: Text(
+                              _editMode ? 'Edit Profile' : 'Profile',
+                              key: ValueKey(_editMode),
+                              style: const TextStyle(fontFamily: 'Outfit',
+                                  fontSize: 20, fontWeight: FontWeight.w700,
+                                  letterSpacing: -0.3, color: Color(0xFFF8FAFC)),
                             ),
-                          ],
-                        ),
+                          ),
+                        ]),
                       ],
                     ),
                   ),
 
                   Expanded(
                     child: _isLoading
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              color: _indigo.withOpacity(0.7),
-                              strokeWidth: 2,
-                            ),
-                          )
+                        ? Center(child: CircularProgressIndicator(
+                            color: _indigo.withOpacity(0.7), strokeWidth: 2))
                         : Stack(
                             children: [
-                              // ── Profile view ───────────
                               SingleChildScrollView(
                                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                                 child: Column(
@@ -534,42 +528,29 @@ class _ProfilePageState extends State<ProfilePage>
                                     // ── Avatar row ────────
                                     Padding(
                                       padding: const EdgeInsets.symmetric(vertical: 20),
-                                      child: Row(
-                                        children: [
-                                          _AvatarWidget(
-                                            avatarFile: _avatarFile,
-                                            avatarUrl: _avatarUrl,
-                                            initials: _initials,
-                                          ),
-                                          const SizedBox(width: 14),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  _name.isEmpty ? 'Loading...' : _name,
-                                                  style: const TextStyle(
-                                                    fontFamily: 'Outfit',
-                                                    fontSize: 16,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: Color(0xFFF8FAFC),
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  _email,
-                                                  style: TextStyle(
-                                                    fontFamily: 'Outfit',
+                                      child: Row(children: [
+                                        _AvatarWidget(
+                                          avatarFile: _avatarFile,
+                                          avatarUrl: _avatarUrl,
+                                          initials: _initials,
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(_name.isEmpty ? 'Loading...' : _name,
+                                                style: const TextStyle(fontFamily: 'Outfit',
+                                                    fontSize: 16, fontWeight: FontWeight.w600,
+                                                    color: Color(0xFFF8FAFC))),
+                                            const SizedBox(height: 2),
+                                            Text(_email,
+                                                style: TextStyle(fontFamily: 'Outfit',
                                                     fontSize: 12,
-                                                    color: Colors.white.withOpacity(0.38),
-                                                  ),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
+                                                    color: Colors.white.withOpacity(0.38)),
+                                                overflow: TextOverflow.ellipsis),
+                                          ],
+                                        )),
+                                      ]),
                                     ),
 
                                     // ── Edit Profile button ──
@@ -580,25 +561,18 @@ class _ProfilePageState extends State<ProfilePage>
                                         decoration: BoxDecoration(
                                           color: Colors.white.withOpacity(0.04),
                                           borderRadius: BorderRadius.circular(12),
-                                          border: Border.all(
-                                              color: Colors.white.withOpacity(0.09)),
+                                          border: Border.all(color: Colors.white.withOpacity(0.09)),
                                         ),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.edit_outlined,
-                                                size: 15,
-                                                color: Colors.white.withOpacity(0.5)),
-                                            const SizedBox(width: 6),
-                                            Text('Edit Profile',
-                                                style: TextStyle(
-                                                  fontFamily: 'Outfit',
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: Colors.white.withOpacity(0.6),
-                                                )),
-                                          ],
-                                        ),
+                                        child: Row(mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                          Icon(Icons.edit_outlined, size: 15,
+                                              color: Colors.white.withOpacity(0.5)),
+                                          const SizedBox(width: 6),
+                                          Text('Edit Profile', style: TextStyle(
+                                              fontFamily: 'Outfit', fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: Colors.white.withOpacity(0.6))),
+                                        ]),
                                       ),
                                     ),
 
@@ -615,34 +589,28 @@ class _ProfilePageState extends State<ProfilePage>
                                           border: Border.all(
                                               color: const Color(0xFFE24B4A).withOpacity(0.25)),
                                         ),
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
-                                          children: [
-                                            Icon(Icons.logout_rounded,
-                                                size: 15,
-                                                color: const Color(0xFFF09595).withOpacity(0.8)),
-                                            const SizedBox(width: 6),
-                                            Text('Sign Out',
-                                                style: TextStyle(
-                                                  fontFamily: 'Outfit',
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w500,
-                                                  color: const Color(0xFFF09595).withOpacity(0.8),
-                                                )),
-                                          ],
-                                        ),
+                                        child: Row(mainAxisAlignment: MainAxisAlignment.center,
+                                            children: [
+                                          Icon(Icons.logout_rounded, size: 15,
+                                              color: const Color(0xFFF09595).withOpacity(0.8)),
+                                          const SizedBox(width: 6),
+                                          Text('Sign Out', style: TextStyle(
+                                              fontFamily: 'Outfit', fontSize: 13,
+                                              fontWeight: FontWeight.w500,
+                                              color: const Color(0xFFF09595).withOpacity(0.8))),
+                                        ]),
                                       ),
                                     ),
 
-                                    const SizedBox(height: 24),
+                                    const SizedBox(height: 16),
+
+                                    
+                                    const SizedBox(height: 16),
 
                                     Text('MANAGE ACCOUNTS',
-                                        style: TextStyle(
-                                          fontFamily: 'Outfit',
-                                          fontSize: 10,
-                                          letterSpacing: 1.0,
-                                          color: Colors.white.withOpacity(0.3),
-                                        )),
+                                        style: TextStyle(fontFamily: 'Outfit',
+                                            fontSize: 10, letterSpacing: 1.0,
+                                            color: Colors.white.withOpacity(0.3))),
 
                                     const SizedBox(height: 12),
 
@@ -671,14 +639,11 @@ class _ProfilePageState extends State<ProfilePage>
                                                         : Colors.white.withOpacity(0.08),
                                                   ),
                                                 ),
-                                                child: Text(f,
-                                                    style: TextStyle(
-                                                      fontFamily: 'Outfit',
-                                                      fontSize: 12,
-                                                      color: active
-                                                          ? const Color(0xFF818CF8)
-                                                          : Colors.white.withOpacity(0.4),
-                                                    )),
+                                                child: Text(f, style: TextStyle(
+                                                    fontFamily: 'Outfit', fontSize: 12,
+                                                    color: active
+                                                        ? const Color(0xFF818CF8)
+                                                        : Colors.white.withOpacity(0.4))),
                                               ),
                                             ),
                                           );
@@ -690,21 +655,23 @@ class _ProfilePageState extends State<ProfilePage>
 
                                     // ── Account cards ─────
                                     _accountsLoading
-                                        ? Center(
-                                            child: CircularProgressIndicator(
-                                              color: _indigo.withOpacity(0.6),
-                                              strokeWidth: 2,
-                                            ),
-                                          )
+                                        ? Center(child: CircularProgressIndicator(
+                                            color: _indigo.withOpacity(0.6), strokeWidth: 2))
                                         : _filtered.isEmpty
                                             ? _EmptyAccounts(onCreateTap: _goToCreateAccount)
                                             : Column(
-                                                children: _filtered
-                                                    .map((acc) => _AccountCard(
-                                                          account: acc,
-                                                          onTap: () {},
-                                                        ))
-                                                    .toList(),
+                                                children: _filtered.map((acc) {
+                                                  final type = acc['type'] as String? ?? 'Solo';
+                                                  final isSolo = type == 'Solo';
+                                                  return _AccountCard(
+                                                    account: acc,
+                                                    onTap: () => _openAccountDashboard(acc),
+                                                    showArrow: !isSolo,
+                                                    hint: isSolo
+                                                        ? 'Managed from main dashboard'
+                                                        : null,
+                                                  );
+                                                }).toList(),
                                               ),
 
                                     const SizedBox(height: 8),
@@ -724,28 +691,25 @@ class _ProfilePageState extends State<ProfilePage>
                                 AnimatedBuilder(
                                   animation: _editPanelAnim,
                                   builder: (_, child) {
-                                    return Stack(
-                                      children: [
-                                        GestureDetector(
-                                          onTap: _closeEditPanel,
-                                          child: Container(
-                                            color: Colors.black.withOpacity(
-                                                0.5 * _editPanelAnim.value),
+                                    return Stack(children: [
+                                      GestureDetector(
+                                        onTap: _closeEditPanel,
+                                        child: Container(
+                                          color: Colors.black.withOpacity(
+                                              0.5 * _editPanelAnim.value),
+                                        ),
+                                      ),
+                                      Positioned(
+                                        left: 0, right: 0, bottom: 0,
+                                        child: Transform.translate(
+                                          offset: Offset(0, 60 * (1 - _editPanelAnim.value)),
+                                          child: Opacity(
+                                            opacity: _editPanelAnim.value,
+                                            child: child,
                                           ),
                                         ),
-                                        Positioned(
-                                          left: 0, right: 0, bottom: 0,
-                                          child: Transform.translate(
-                                            offset: Offset(
-                                                0, 60 * (1 - _editPanelAnim.value)),
-                                            child: Opacity(
-                                              opacity: _editPanelAnim.value,
-                                              child: child,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    );
+                                      ),
+                                    ]);
                                   },
                                   child: _EditPanel(
                                     avatarFile: _avatarFile,
@@ -761,7 +725,6 @@ class _ProfilePageState extends State<ProfilePage>
                             ],
                           ),
                   ),
-                  // ── NO BottomNav here — handled by MainShell ──
                 ],
               ),
             ),
@@ -785,14 +748,10 @@ class _EditPanel extends StatelessWidget {
   final VoidCallback onCancel;
 
   const _EditPanel({
-    required this.avatarFile,
-    required this.avatarUrl,
-    required this.initials,
-    required this.nameController,
-    required this.isSaving,
-    required this.onPickImage,
-    required this.onSave,
-    required this.onCancel,
+    required this.avatarFile, required this.avatarUrl,
+    required this.initials, required this.nameController,
+    required this.isSaving, required this.onPickImage,
+    required this.onSave, required this.onCancel,
   });
 
   static const _indigo = Color(0xFF6366F1);
@@ -807,161 +766,77 @@ class _EditPanel extends StatelessWidget {
       ),
       padding: EdgeInsets.fromLTRB(
           24, 16, 24, MediaQuery.of(context).viewInsets.bottom + 28),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 36, height: 4,
-            margin: const EdgeInsets.only(bottom: 20),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(2),
-            ),
+      child: Column(mainAxisSize: MainAxisSize.min, children: [
+        Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 20),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(2))),
+        GestureDetector(
+          onTap: onPickImage,
+          child: Stack(alignment: Alignment.bottomRight, children: [
+            _AvatarWidget(avatarFile: avatarFile, avatarUrl: avatarUrl,
+                initials: initials, size: 80),
+            Container(width: 26, height: 26,
+                decoration: BoxDecoration(color: _indigo, shape: BoxShape.circle,
+                    border: Border.all(color: const Color(0xFF13151F), width: 2)),
+                child: const Icon(Icons.camera_alt_rounded, size: 13, color: Colors.white)),
+          ]),
+        ),
+        const SizedBox(height: 6),
+        Text('Tap to change photo',
+            style: TextStyle(fontFamily: 'Outfit', fontSize: 11,
+                color: Colors.white.withOpacity(0.3))),
+        const SizedBox(height: 24),
+        Align(alignment: Alignment.centerLeft,
+            child: Text('FULL NAME', style: TextStyle(fontFamily: 'Outfit',
+                fontSize: 10, letterSpacing: 0.9, color: Colors.white.withOpacity(0.32)))),
+        const SizedBox(height: 6),
+        TextField(
+          controller: nameController,
+          autofocus: true,
+          style: const TextStyle(fontFamily: 'Outfit', fontSize: 14, color: Color(0xFFF8FAFC)),
+          decoration: InputDecoration(
+            hintText: 'Your full name',
+            hintStyle: TextStyle(fontFamily: 'Outfit', fontSize: 14,
+                color: Colors.white.withOpacity(0.25)),
+            prefixIcon: Icon(Icons.person_outline_rounded, size: 17,
+                color: Colors.white.withOpacity(0.28)),
+            filled: true, fillColor: Colors.white.withOpacity(0.04),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.white.withOpacity(0.09), width: 1)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFF6366F1), width: 1.2)),
           ),
-          GestureDetector(
-            onTap: onPickImage,
-            child: Stack(
-              alignment: Alignment.bottomRight,
-              children: [
-                _AvatarWidget(
-                  avatarFile: avatarFile,
-                  avatarUrl: avatarUrl,
-                  initials: initials,
-                  size: 80,
-                ),
-                Container(
-                  width: 26, height: 26,
-                  decoration: BoxDecoration(
-                    color: _indigo,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                        color: const Color(0xFF13151F), width: 2),
-                  ),
-                  child: const Icon(Icons.camera_alt_rounded,
-                      size: 13, color: Colors.white),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text('Tap to change photo',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 11,
-                color: Colors.white.withOpacity(0.3),
-              )),
-          const SizedBox(height: 24),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text('FULL NAME',
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 10,
-                  letterSpacing: 0.9,
-                  color: Colors.white.withOpacity(0.32),
-                )),
-          ),
-          const SizedBox(height: 6),
-          TextField(
-            controller: nameController,
-            autofocus: true,
-            style: const TextStyle(
-              fontFamily: 'Outfit',
-              fontSize: 14,
-              color: Color(0xFFF8FAFC),
-            ),
-            decoration: InputDecoration(
-              hintText: 'Your full name',
-              hintStyle: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 14,
-                color: Colors.white.withOpacity(0.25),
-              ),
-              prefixIcon: Icon(Icons.person_outline_rounded,
-                  size: 17, color: Colors.white.withOpacity(0.28)),
-              filled: true,
-              fillColor: Colors.white.withOpacity(0.04),
-              contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 14, vertical: 13),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                    color: Colors.white.withOpacity(0.09), width: 1),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                    color: Color(0xFF6366F1), width: 1.2),
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            children: [
-              Expanded(
-                child: GestureDetector(
-                  onTap: onCancel,
-                  child: Container(
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                          color: Colors.white.withOpacity(0.09)),
-                    ),
-                    child: Center(
-                      child: Text('Cancel',
-                          style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withOpacity(0.5),
-                          )),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: GestureDetector(
-                  onTap: isSaving ? null : onSave,
-                  child: Container(
-                    height: 46,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(12),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)],
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: _indigo.withOpacity(0.3),
-                          blurRadius: 14,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Center(
-                      child: isSaving
-                          ? const SizedBox(
-                              width: 18, height: 18,
-                              child: CircularProgressIndicator(
-                                  color: Colors.white, strokeWidth: 2))
-                          : const Text('Save Changes',
-                              style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.white,
-                              )),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 24),
+        Row(children: [
+          Expanded(child: GestureDetector(
+            onTap: onCancel,
+            child: Container(height: 46,
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.09))),
+                child: Center(child: Text('Cancel', style: TextStyle(fontFamily: 'Outfit',
+                    fontSize: 13, fontWeight: FontWeight.w500,
+                    color: Colors.white.withOpacity(0.5))))),
+          )),
+          const SizedBox(width: 12),
+          Expanded(flex: 2, child: GestureDetector(
+            onTap: isSaving ? null : onSave,
+            child: Container(height: 46,
+                decoration: BoxDecoration(borderRadius: BorderRadius.circular(12),
+                    gradient: const LinearGradient(
+                        colors: [Color(0xFF6366F1), Color(0xFF8B5CF6)]),
+                    boxShadow: [BoxShadow(color: _indigo.withOpacity(0.3),
+                        blurRadius: 14, offset: const Offset(0, 4))]),
+                child: Center(child: isSaving
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Save Changes', style: TextStyle(fontFamily: 'Outfit',
+                        fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)))),
+          )),
+        ]),
+      ]),
     );
   }
 }
@@ -975,52 +850,33 @@ class _AvatarWidget extends StatelessWidget {
   final double size;
 
   const _AvatarWidget({
-    required this.avatarFile,
-    required this.avatarUrl,
-    required this.initials,
-    this.size = 64,
+    required this.avatarFile, required this.avatarUrl,
+    required this.initials, this.size = 64,
   });
 
   @override
   Widget build(BuildContext context) {
     ImageProvider? imageProvider;
-    if (avatarFile != null) {
-      imageProvider = FileImage(avatarFile!);
-    } else if (avatarUrl.isNotEmpty) {
-      imageProvider = NetworkImage(avatarUrl);
-    }
+    if (avatarFile != null) imageProvider = FileImage(avatarFile!);
+    else if (avatarUrl.isNotEmpty) imageProvider = NetworkImage(avatarUrl);
 
     return Container(
       width: size, height: size,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: imageProvider == null
-            ? const LinearGradient(
-                colors: [Color(0xFF3730A3), Color(0xFF6D28D9)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              )
+            ? const LinearGradient(colors: [Color(0xFF3730A3), Color(0xFF6D28D9)],
+                begin: Alignment.topLeft, end: Alignment.bottomRight)
             : null,
-        border: Border.all(
-          color: const Color(0xFF6366F1).withOpacity(0.4),
-          width: 2,
-        ),
+        border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.4), width: 2),
         image: imageProvider != null
             ? DecorationImage(image: imageProvider, fit: BoxFit.cover)
             : null,
       ),
       child: imageProvider == null
-          ? Center(
-              child: Text(
-                initials,
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: size * 0.28,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFE0E7FF),
-                ),
-              ),
-            )
+          ? Center(child: Text(initials, style: TextStyle(fontFamily: 'Outfit',
+              fontSize: size * 0.28, fontWeight: FontWeight.w700,
+              color: const Color(0xFFE0E7FF))))
           : null,
     );
   }
@@ -1037,32 +893,19 @@ class _EmptyAccounts extends StatelessWidget {
     return GestureDetector(
       onTap: onCreateTap,
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(24),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-              color: const Color(0xFF6366F1).withOpacity(0.15)),
-        ),
+        width: double.infinity, padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.15))),
         child: Column(children: [
-          Icon(Icons.account_balance_wallet_outlined,
-              size: 28,
+          Icon(Icons.account_balance_wallet_outlined, size: 28,
               color: const Color(0xFF818CF8).withOpacity(0.4)),
           const SizedBox(height: 8),
-          Text('No accounts yet',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 13,
-                color: Colors.white.withOpacity(0.35),
-              )),
+          Text('No accounts yet', style: TextStyle(fontFamily: 'Outfit',
+              fontSize: 13, color: Colors.white.withOpacity(0.35))),
           const SizedBox(height: 4),
-          Text('Tap to create your first account',
-              style: TextStyle(
-                fontFamily: 'Outfit',
-                fontSize: 11,
-                color: const Color(0xFF818CF8).withOpacity(0.5),
-              )),
+          Text('Tap to create your first account', style: TextStyle(fontFamily: 'Outfit',
+              fontSize: 11, color: const Color(0xFF818CF8).withOpacity(0.5))),
         ]),
       ),
     );
@@ -1078,17 +921,13 @@ class _SheetOption extends StatelessWidget {
   final bool isDestructive;
 
   const _SheetOption({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.isDestructive = false,
+    required this.icon, required this.label,
+    required this.onTap, this.isDestructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final color = isDestructive
-        ? const Color(0xFFE24B4A)
-        : const Color(0xFFF8FAFC);
+    final color = isDestructive ? const Color(0xFFE24B4A) : const Color(0xFFF8FAFC);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1099,25 +938,16 @@ class _SheetOption extends StatelessWidget {
               ? const Color(0xFFE24B4A).withOpacity(0.08)
               : Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isDestructive
-                ? const Color(0xFFE24B4A).withOpacity(0.25)
-                : Colors.white.withOpacity(0.08),
-          ),
+          border: Border.all(color: isDestructive
+              ? const Color(0xFFE24B4A).withOpacity(0.25)
+              : Colors.white.withOpacity(0.08)),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: color.withOpacity(0.7)),
-            const SizedBox(width: 12),
-            Text(label,
-                style: TextStyle(
-                  fontFamily: 'Outfit',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: color.withOpacity(0.85),
-                )),
-          ],
-        ),
+        child: Row(children: [
+          Icon(icon, size: 18, color: color.withOpacity(0.7)),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(fontFamily: 'Outfit', fontSize: 14,
+              fontWeight: FontWeight.w500, color: color.withOpacity(0.85))),
+        ]),
       ),
     );
   }
@@ -1128,7 +958,13 @@ class _SheetOption extends StatelessWidget {
 class _AccountCard extends StatelessWidget {
   final Map<String, dynamic> account;
   final VoidCallback onTap;
-  const _AccountCard({required this.account, required this.onTap});
+  final bool showArrow;
+  final String? hint;
+
+  const _AccountCard({
+    required this.account, required this.onTap,
+    this.showArrow = true, this.hint,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1138,75 +974,52 @@ class _AccountCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.03),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withOpacity(0.07)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40, height: 40,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: color.withOpacity(0.25)),
+        decoration: BoxDecoration(color: Colors.white.withOpacity(0.03),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withOpacity(0.07))),
+        child: Row(children: [
+          Container(width: 40, height: 40,
+              decoration: BoxDecoration(color: color.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: color.withOpacity(0.25))),
+              child: Icon(account['icon'] as IconData, size: 20, color: color)),
+          const SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(account['name'] as String,
+                style: const TextStyle(fontFamily: 'Outfit', fontSize: 14,
+                    fontWeight: FontWeight.w600, color: Color(0xFFF8FAFC))),
+            const SizedBox(height: 4),
+            Row(children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(color: const Color(0xFF14B8A6).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFF14B8A6).withOpacity(0.25))),
+                child: Row(children: [
+                  Container(width: 5, height: 5,
+                      decoration: const BoxDecoration(color: Color(0xFF14B8A6),
+                          shape: BoxShape.circle)),
+                  const SizedBox(width: 4),
+                  const Text('Active', style: TextStyle(fontFamily: 'Outfit',
+                      fontSize: 10, color: Color(0xFF14B8A6))),
+                ]),
               ),
-              child: Icon(account['icon'] as IconData, size: 20, color: color),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(account['name'] as String,
-                      style: const TextStyle(
-                        fontFamily: 'Outfit',
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: Color(0xFFF8FAFC),
-                      )),
-                  const SizedBox(height: 4),
-                  Row(children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF14B8A6).withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: const Color(0xFF14B8A6).withOpacity(0.25)),
-                      ),
-                      child: Row(children: [
-                        Container(
-                          width: 5, height: 5,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF14B8A6),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Text('Active',
-                            style: TextStyle(
-                                fontFamily: 'Outfit',
-                                fontSize: 10,
-                                color: Color(0xFF14B8A6))),
-                      ]),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(account['type'] as String,
-                        style: TextStyle(
-                            fontFamily: 'Outfit',
-                            fontSize: 10,
-                            color: Colors.white.withOpacity(0.28))),
-                  ]),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                size: 18, color: Colors.white.withOpacity(0.22)),
-          ],
-        ),
+              const SizedBox(width: 6),
+              Text(account['type'] as String,
+                  style: TextStyle(fontFamily: 'Outfit', fontSize: 10,
+                      color: Colors.white.withOpacity(0.28))),
+            ]),
+            if (hint != null) ...[
+              const SizedBox(height: 3),
+              Text(hint!, style: TextStyle(fontFamily: 'Outfit', fontSize: 10,
+                  color: Colors.white.withOpacity(0.22), fontStyle: FontStyle.italic)),
+            ],
+          ])),
+          if (showArrow)
+            Icon(Icons.chevron_right_rounded, size: 18, color: Colors.white.withOpacity(0.22))
+          else
+            Icon(Icons.info_outline_rounded, size: 16, color: Colors.white.withOpacity(0.15)),
+        ]),
       ),
     );
   }
@@ -1220,10 +1033,8 @@ class _GradientButton extends StatefulWidget {
   final List<Color> colors;
   final VoidCallback onTap;
   const _GradientButton({
-    required this.label,
-    required this.icon,
-    required this.colors,
-    required this.onTap,
+    required this.label, required this.icon,
+    required this.colors, required this.onTap,
   });
   @override
   State<_GradientButton> createState() => _GradientButtonState();
@@ -1235,10 +1046,7 @@ class _GradientButtonState extends State<_GradientButton> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
+      onTapUp: (_) { setState(() => _pressed = false); widget.onTap(); },
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.97 : 1.0,
@@ -1247,35 +1055,18 @@ class _GradientButtonState extends State<_GradientButton> {
           width: double.infinity, height: 50,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            gradient: LinearGradient(
-              colors: widget.colors,
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.colors.first.withOpacity(0.28),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            gradient: LinearGradient(colors: widget.colors,
+                begin: Alignment.centerLeft, end: Alignment.centerRight),
+            boxShadow: [BoxShadow(color: widget.colors.first.withOpacity(0.28),
+                blurRadius: 18, offset: const Offset(0, 6))],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(widget.icon,
-                  size: 18, color: Colors.white.withOpacity(0.8)),
-              const SizedBox(width: 8),
-              Text(widget.label.toUpperCase(),
-                  style: const TextStyle(
-                    fontFamily: 'Outfit',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: 0.8,
-                    color: Colors.white,
-                  )),
-            ],
-          ),
+          child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(widget.icon, size: 18, color: Colors.white.withOpacity(0.8)),
+            const SizedBox(width: 8),
+            Text(widget.label.toUpperCase(),
+                style: const TextStyle(fontFamily: 'Outfit', fontSize: 11,
+                    fontWeight: FontWeight.w600, letterSpacing: 0.8, color: Colors.white)),
+          ]),
         ),
       ),
     );
@@ -1287,29 +1078,19 @@ class _GradientButtonState extends State<_GradientButton> {
 class _Orb extends StatelessWidget {
   final double x, y, size;
   final Color color;
-  const _Orb({required this.x, required this.y,
-      required this.size, required this.color});
+  const _Orb({required this.x, required this.y, required this.size, required this.color});
   @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: x, top: y,
-      child: Container(
-        width: size, height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: [color, Colors.transparent]),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Positioned(
+        left: x, top: y,
+        child: Container(width: size, height: size,
+            decoration: BoxDecoration(shape: BoxShape.circle,
+                gradient: RadialGradient(colors: [color, Colors.transparent]))));
 }
 
 class _GridPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
-    final p = Paint()
-      ..color = Colors.white.withOpacity(0.022)
-      ..strokeWidth = 0.5;
+    final p = Paint()..color = Colors.white.withOpacity(0.022)..strokeWidth = 0.5;
     const step = 32.0;
     for (double x = 0; x < size.width; x += step) {
       canvas.drawLine(Offset(x, 0), Offset(x, size.height), p);

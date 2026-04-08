@@ -101,16 +101,15 @@ class _CreateAccountPageState extends State<CreateAccountPage>
       final colorHex =
           '0x${color.value.toRadixString(16).toUpperCase().padLeft(8, '0')}';
 
-      await FirebaseFirestore.instance
-          .collection('accounts')
-          .add({
-        'userId': user.uid,
-        'name': name,
-        'type': _selectedType,
-        'color': colorHex,
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
+      // In CreateAccountPage when saving to Firestore, make sure members is set:
+await FirebaseFirestore.instance.collection('accounts').add({
+  'userId': user.uid,
+  'name': name,
+  'type': _selectedType,
+  'color': colorHex,
+  'members': [user.uid], // ← add this line if missing
+  'createdAt': FieldValue.serverTimestamp(),
+});
       if (mounted) {
         _showSnack('Account created successfully!',
             isError: false);

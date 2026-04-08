@@ -30,7 +30,7 @@ class AuthService {
       await UserService.createUser(
         userId: credential.user!.uid,
         name: name,
-        email: email,
+        email: email.trim().toLowerCase(),
       );
 
       // ✅ Auto-create default Solo account

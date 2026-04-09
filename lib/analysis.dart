@@ -160,6 +160,27 @@ class _AnalysisPageState extends State<AnalysisPage>
     }
   }
 
+  // ── Helper to map Firestore docs ───────────────────────
+  List<Map<String, dynamic>> _mapDocs(List<QueryDocumentSnapshot> docs) {
+    return docs.map((doc) {
+      final data = doc.data() as Map<String, dynamic>;
+      DateTime date;
+      try { date = (data['date'] as Timestamp).toDate(); }
+      catch (_) { date = DateTime.now(); }
+      return {
+        'id': doc.id,
+        'category': data['category'] ?? 'Other',
+        'amount': (data['amount'] as num).toDouble(),
+        'type': data['type'] ?? 'expense',
+        'date': date,
+        'note': data['note'] ?? '',
+        'payerName': data['payerName'] ?? '',
+        'accountId': data['accountId'] ?? '',
+      };
+    }).toList();
+  }
+
+  // ── Load expenses ──────────────────────────────────────
   Future<void> _loadData() async {
     if (mounted) setState(() => _dataLoading = true);
     try {
@@ -172,35 +193,96 @@ class _AnalysisPageState extends State<AnalysisPage>
         default:         startDate = DateTime(now.year, now.month, 1);
       }
 
-      Query query = FirebaseFirestore.instance
-          .collection('expenses')
-          .where('date', isGreaterThanOrEqualTo: Timestamp.fromDate(startDate));
+      List<Map<String, dynamic>> expenses = [];
+      final seen = <String>{};
 
       if (_selectedAccountId.isNotEmpty) {
-        query = query.where('accountId', isEqualTo: _selectedAccountId);
+        // ── Strategy 1: accountId + date filter ───────
+        try {
+          final s = await FirebaseFirestore.instance
+              .collection('expenses')
+              .where('accountId', isEqualTo: _selectedAccountId)
+              .where('date',
+                  isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+              .get();
+          expenses.addAll(_mapDocs(s.docs));
+          debugPrint('Strategy 1 (accountId+date): ${s.docs.length} docs');
+        } catch (e) {
+          debugPrint('Strategy 1 failed: $e');
+        }
+
+        // ── Strategy 2: accountId only, manual date filter
+        if (expenses.isEmpty) {
+          try {
+            final s = await FirebaseFirestore.instance
+                .collection('expenses')
+                .where('accountId', isEqualTo: _selectedAccountId)
+                .get();
+            final all = _mapDocs(s.docs);
+            expenses = all
+                .where((e) =>
+                    (e['date'] as DateTime).isAfter(startDate))
+                .toList();
+            debugPrint(
+                'Strategy 2 (accountId only): ${s.docs.length} total, ${expenses.length} after date filter');
+          } catch (e) {
+            debugPrint('Strategy 2 failed: $e');
+          }
+        }
       } else {
-        query = query.where('userId', isEqualTo: _myUid);
+        // ── All accounts ───────────────────────────────
+        final accountIds =
+            _accounts.map((a) => a['id'] as String).toList();
+        debugPrint('All accounts mode — accountIds: $accountIds');
+
+        // Strategy A: per account with date
+        for (final accountId in accountIds) {
+          try {
+            final s = await FirebaseFirestore.instance
+                .collection('expenses')
+                .where('accountId', isEqualTo: accountId)
+                .where('date',
+                    isGreaterThanOrEqualTo: Timestamp.fromDate(startDate))
+                .get();
+            for (final doc in _mapDocs(s.docs)) {
+              if (seen.add(doc['id'] as String)) expenses.add(doc);
+            }
+            debugPrint('Account $accountId: ${s.docs.length} docs');
+          } catch (e) {
+            debugPrint('Account $accountId failed: $e');
+          }
+        }
+
+        // Strategy B: userId fallback for older expenses
+        try {
+          final s = await FirebaseFirestore.instance
+              .collection('expenses')
+              .where('userId', isEqualTo: _myUid)
+              .get();
+          final all = _mapDocs(s.docs);
+          final filtered = all
+              .where((e) =>
+                  (e['date'] as DateTime).isAfter(startDate) &&
+                  seen.add(e['id'] as String))
+              .toList();
+          expenses.addAll(filtered);
+          debugPrint(
+              'Strategy B (userId): ${s.docs.length} total, ${filtered.length} new');
+        } catch (e) {
+          debugPrint('Strategy B failed: $e');
+        }
       }
 
-      final snapshot = await query.get();
-      final expenses = snapshot.docs.map((doc) {
-        final data = doc.data() as Map<String, dynamic>;
-        DateTime date;
-        try { date = (data['date'] as Timestamp).toDate(); }
-        catch (_) { date = DateTime.now(); }
-        return {
-          'id': doc.id,
-          'category': data['category'] ?? 'Other',
-          'amount': (data['amount'] as num).toDouble(),
-          'type': data['type'] ?? 'expense',
-          'date': date,
-          'note': data['note'] ?? '',
-          'payerName': data['payerName'] ?? '',
-          'accountId': data['accountId'] ?? '',
-        };
-      }).toList();
+      // Sort by date descending
+      expenses.sort((a, b) =>
+          (b['date'] as DateTime).compareTo(a['date'] as DateTime));
 
-      if (mounted) setState(() { _expenses = expenses; _dataLoading = false; });
+      debugPrint(
+          '📊 FINAL: ${expenses.length} expenses — $_period / $_selectedAccountName');
+
+      if (mounted) {
+        setState(() { _expenses = expenses; _dataLoading = false; });
+      }
     } catch (e) {
       debugPrint('loadData error: $e');
       if (mounted) setState(() => _dataLoading = false);
@@ -234,15 +316,18 @@ class _AnalysisPageState extends State<AnalysisPage>
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                    pw.Text('EXPENSE REPORT',
-                        style: pw.TextStyle(fontSize: 20,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColors.indigo700)),
-                    pw.Text('$_selectedAccountName · $_period',
-                        style: const pw.TextStyle(
-                            fontSize: 11, color: PdfColors.grey600)),
-                  ]),
+                  pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('EXPENSE REPORT',
+                            style: pw.TextStyle(
+                                fontSize: 20,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.indigo700)),
+                        pw.Text('$_selectedAccountName · $_period',
+                            style: const pw.TextStyle(
+                                fontSize: 11, color: PdfColors.grey600)),
+                      ]),
                   pw.Text(dateStr,
                       style: const pw.TextStyle(
                           fontSize: 10, color: PdfColors.grey500)),
@@ -255,12 +340,16 @@ class _AnalysisPageState extends State<AnalysisPage>
           ),
           build: (context) => [
             pw.Text('SUMMARY',
-                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.grey600, letterSpacing: 1.2)),
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.grey600,
+                    letterSpacing: 1.2)),
             pw.SizedBox(height: 8),
             pw.Container(
               padding: const pw.EdgeInsets.all(14),
-              decoration: pw.BoxDecoration(color: PdfColors.indigo50,
+              decoration: pw.BoxDecoration(
+                  color: PdfColors.indigo50,
                   borderRadius: pw.BorderRadius.circular(8)),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
@@ -280,16 +369,20 @@ class _AnalysisPageState extends State<AnalysisPage>
             ),
             pw.SizedBox(height: 20),
             pw.Text('SPENDING BY CATEGORY',
-                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.grey600, letterSpacing: 1.2)),
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.grey600,
+                    letterSpacing: 1.2)),
             pw.SizedBox(height: 8),
             if (cats.isEmpty)
               pw.Text('No expense data for this period.',
                   style: const pw.TextStyle(color: PdfColors.grey500))
             else
               pw.Table(
-                border: pw.TableBorder(horizontalInside:
-                    pw.BorderSide(color: PdfColors.grey200, width: 0.5)),
+                border: pw.TableBorder(
+                    horizontalInside: pw.BorderSide(
+                        color: PdfColors.grey200, width: 0.5)),
                 columnWidths: {
                   0: const pw.FlexColumnWidth(0.5),
                   1: const pw.FlexColumnWidth(2.5),
@@ -299,19 +392,25 @@ class _AnalysisPageState extends State<AnalysisPage>
                 },
                 children: [
                   pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.indigo700),
-                    children: [_pdfTh('#'), _pdfTh('Category'),
-                        _pdfTh('Amount'), _pdfTh('% of Total'), _pdfTh('Bar')],
+                    decoration: const pw.BoxDecoration(
+                        color: PdfColors.indigo700),
+                    children: [
+                      _pdfTh('#'), _pdfTh('Category'),
+                      _pdfTh('Amount'), _pdfTh('% of Total'), _pdfTh('Bar')
+                    ],
                   ),
                   ...cats.asMap().entries.map((entry) {
                     final i = entry.key;
                     final cat = entry.value;
                     final pct = _totalSpent > 0
-                        ? (cat['amount'] as double) / _totalSpent * 100 : 0.0;
+                        ? (cat['amount'] as double) / _totalSpent * 100
+                        : 0.0;
                     final barW = (cat['pct'] as double) * 80;
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(
-                          color: i.isEven ? PdfColors.grey50 : PdfColors.white),
+                          color: i.isEven
+                              ? PdfColors.grey50
+                              : PdfColors.white),
                       children: [
                         _pdfTd('${i + 1}'),
                         _pdfTd(cat['name'] as String),
@@ -321,29 +420,44 @@ class _AnalysisPageState extends State<AnalysisPage>
                           padding: const pw.EdgeInsets.symmetric(
                               vertical: 6, horizontal: 4),
                           child: pw.Stack(children: [
-                            pw.Container(height: 8, width: 80,
-                                decoration: pw.BoxDecoration(color: PdfColors.grey200,
-                                    borderRadius: pw.BorderRadius.circular(4))),
-                            pw.Container(height: 8, width: barW,
-                                decoration: pw.BoxDecoration(color: PdfColors.indigo400,
-                                    borderRadius: pw.BorderRadius.circular(4))),
+                            pw.Container(
+                                height: 8,
+                                width: 80,
+                                decoration: pw.BoxDecoration(
+                                    color: PdfColors.grey200,
+                                    borderRadius:
+                                        pw.BorderRadius.circular(4))),
+                            pw.Container(
+                                height: 8,
+                                width: barW,
+                                decoration: pw.BoxDecoration(
+                                    color: PdfColors.indigo400,
+                                    borderRadius:
+                                        pw.BorderRadius.circular(4))),
                           ]),
                         ),
                       ],
                     );
                   }),
                   pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.indigo50),
+                    decoration: const pw.BoxDecoration(
+                        color: PdfColors.indigo50),
                     children: [
                       _pdfTd(''),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text('TOTAL', style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10,
-                              color: PdfColors.indigo700))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(_fmt(_totalSpent), style: pw.TextStyle(
-                              fontWeight: pw.FontWeight.bold, fontSize: 10,
-                              color: PdfColors.red700))),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text('TOTAL',
+                              style: pw.TextStyle(
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 10,
+                                  color: PdfColors.indigo700))),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(_fmt(_totalSpent),
+                              style: pw.TextStyle(
+                                  fontWeight: pw.FontWeight.bold,
+                                  fontSize: 10,
+                                  color: PdfColors.red700))),
                       _pdfTd('100%'),
                       _pdfTd(''),
                     ],
@@ -353,35 +467,48 @@ class _AnalysisPageState extends State<AnalysisPage>
             pw.SizedBox(height: 20),
             if (_monthlyTrend.length > 1) ...[
               pw.Text('MONTHLY TREND',
-                  style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold,
-                      color: PdfColors.grey600, letterSpacing: 1.2)),
+                  style: pw.TextStyle(
+                      fontSize: 11,
+                      fontWeight: pw.FontWeight.bold,
+                      color: PdfColors.grey600,
+                      letterSpacing: 1.2)),
               pw.SizedBox(height: 8),
               pw.Table(
-                border: pw.TableBorder(horizontalInside:
-                    pw.BorderSide(color: PdfColors.grey200, width: 0.5)),
+                border: pw.TableBorder(
+                    horizontalInside: pw.BorderSide(
+                        color: PdfColors.grey200, width: 0.5)),
                 children: [
                   pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.indigo700),
-                    children: [_pdfTh('Month'), _pdfTh('Amount Spent'),
-                        _pdfTh('vs Average')],
+                    decoration: const pw.BoxDecoration(
+                        color: PdfColors.indigo700),
+                    children: [
+                      _pdfTh('Month'),
+                      _pdfTh('Amount Spent'),
+                      _pdfTh('vs Average')
+                    ],
                   ),
                   ..._monthlyTrend.asMap().entries.map((entry) {
-                    final avg = _monthlyTrend.reduce((a, b) => a + b) /
-                        _monthlyTrend.length;
+                    final avg =
+                        _monthlyTrend.reduce((a, b) => a + b) /
+                            _monthlyTrend.length;
                     final diff = entry.value - avg;
                     final isAbove = diff > 0;
                     return pw.TableRow(
                       decoration: pw.BoxDecoration(
                           color: entry.key.isEven
-                              ? PdfColors.grey50 : PdfColors.white),
+                              ? PdfColors.grey50
+                              : PdfColors.white),
                       children: [
                         _pdfTd(entry.key < _monthlyLabels.length
-                            ? _monthlyLabels[entry.key] : ''),
+                            ? _monthlyLabels[entry.key]
+                            : ''),
                         _pdfTd(_fmt(entry.value), bold: true),
-                        pw.Padding(padding: const pw.EdgeInsets.all(6),
+                        pw.Padding(
+                            padding: const pw.EdgeInsets.all(6),
                             child: pw.Text(
                                 '${isAbove ? '+' : ''}${_fmt(diff.abs())}',
-                                style: pw.TextStyle(fontSize: 9,
+                                style: pw.TextStyle(
+                                    fontSize: 9,
                                     color: isAbove
                                         ? PdfColors.red600
                                         : PdfColors.green600))),
@@ -393,16 +520,20 @@ class _AnalysisPageState extends State<AnalysisPage>
               pw.SizedBox(height: 20),
             ],
             pw.Text('ALL TRANSACTIONS',
-                style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold,
-                    color: PdfColors.grey600, letterSpacing: 1.2)),
+                style: pw.TextStyle(
+                    fontSize: 11,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.grey600,
+                    letterSpacing: 1.2)),
             pw.SizedBox(height: 8),
             if (_expenses.isEmpty)
               pw.Text('No transactions for this period.',
                   style: const pw.TextStyle(color: PdfColors.grey500))
             else
               pw.Table(
-                border: pw.TableBorder(horizontalInside:
-                    pw.BorderSide(color: PdfColors.grey200, width: 0.5)),
+                border: pw.TableBorder(
+                    horizontalInside: pw.BorderSide(
+                        color: PdfColors.grey200, width: 0.5)),
                 columnWidths: {
                   0: const pw.FlexColumnWidth(2),
                   1: const pw.FlexColumnWidth(2),
@@ -411,9 +542,12 @@ class _AnalysisPageState extends State<AnalysisPage>
                 },
                 children: [
                   pw.TableRow(
-                    decoration: const pw.BoxDecoration(color: PdfColors.indigo700),
-                    children: [_pdfTh('Date'), _pdfTh('Category'),
-                        _pdfTh('Amount'), _pdfTh('Type')],
+                    decoration: const pw.BoxDecoration(
+                        color: PdfColors.indigo700),
+                    children: [
+                      _pdfTh('Date'), _pdfTh('Category'),
+                      _pdfTh('Amount'), _pdfTh('Type')
+                    ],
                   ),
                   ..._expenses.map((e) {
                     final isExpense = e['type'] == 'expense';
@@ -421,18 +555,25 @@ class _AnalysisPageState extends State<AnalysisPage>
                       _pdfTd(DateFormat('MMM d, yyyy')
                           .format(e['date'] as DateTime)),
                       _pdfTd(e['category'] as String),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
                           child: pw.Text(
                               '${isExpense ? '-' : '+'} ${_fmt(e['amount'] as double)}',
-                              style: pw.TextStyle(fontSize: 9,
+                              style: pw.TextStyle(
+                                  fontSize: 9,
                                   fontWeight: pw.FontWeight.bold,
                                   color: isExpense
-                                      ? PdfColors.red600 : PdfColors.green600))),
-                      pw.Padding(padding: const pw.EdgeInsets.all(6),
-                          child: pw.Text(isExpense ? 'Expense' : 'Income',
-                              style: pw.TextStyle(fontSize: 9,
+                                      ? PdfColors.red600
+                                      : PdfColors.green600))),
+                      pw.Padding(
+                          padding: const pw.EdgeInsets.all(6),
+                          child: pw.Text(
+                              isExpense ? 'Expense' : 'Income',
+                              style: pw.TextStyle(
+                                  fontSize: 9,
                                   color: isExpense
-                                      ? PdfColors.red400 : PdfColors.green400))),
+                                      ? PdfColors.red400
+                                      : PdfColors.green400))),
                     ]);
                   }),
                 ],
@@ -457,7 +598,8 @@ class _AnalysisPageState extends State<AnalysisPage>
 
       await Printing.layoutPdf(
         onLayout: (format) async => pdf.save(),
-        name: 'expense_report_${_selectedAccountName.replaceAll(' ', '_')}_${_period.replaceAll(' ', '_')}.pdf',
+        name:
+            'expense_report_${_selectedAccountName.replaceAll(' ', '_')}_${_period.replaceAll(' ', '_')}.pdf',
       );
     } catch (e) {
       debugPrint('PDF error: $e');
@@ -467,7 +609,8 @@ class _AnalysisPageState extends State<AnalysisPage>
               style: const TextStyle(fontFamily: 'Outfit')),
           backgroundColor: const Color(0xFF6366F1).withOpacity(0.9),
           behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
         ));
       }
     } finally {
@@ -476,36 +619,56 @@ class _AnalysisPageState extends State<AnalysisPage>
   }
 
   pw.Widget _pdfStat(String label, String value, PdfColor color) =>
-      pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.center, children: [
-        pw.Text(value, style: pw.TextStyle(fontSize: 13,
-            fontWeight: pw.FontWeight.bold, color: color)),
-        pw.SizedBox(height: 2),
-        pw.Text(label, style: const pw.TextStyle(
-            fontSize: 8, color: PdfColors.grey500)),
-      ]);
+      pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          children: [
+            pw.Text(value,
+                style: pw.TextStyle(
+                    fontSize: 13,
+                    fontWeight: pw.FontWeight.bold,
+                    color: color)),
+            pw.SizedBox(height: 2),
+            pw.Text(label,
+                style: const pw.TextStyle(
+                    fontSize: 8, color: PdfColors.grey500)),
+          ]);
 
   pw.Widget _pdfDivider() =>
       pw.Container(width: 1, height: 30, color: PdfColors.indigo200);
 
   pw.Widget _pdfTh(String text) => pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 9,
-          fontWeight: pw.FontWeight.bold, color: PdfColors.white)));
+      padding:
+          const pw.EdgeInsets.symmetric(vertical: 6, horizontal: 6),
+      child: pw.Text(text,
+          style: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.white)));
 
   pw.Widget _pdfTd(String text, {bool bold = false}) => pw.Padding(
       padding: const pw.EdgeInsets.all(6),
-      child: pw.Text(text, style: pw.TextStyle(fontSize: 9,
-          fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-          color: PdfColors.grey800)));
+      child: pw.Text(text,
+          style: pw.TextStyle(
+              fontSize: 9,
+              fontWeight: bold
+                  ? pw.FontWeight.bold
+                  : pw.FontWeight.normal,
+              color: PdfColors.grey800)));
 
   Color _categoryColor(String name) {
     const colors = {
-      'Food': Color(0xFFEC4899), 'Electricity': Color(0xFF6366F1),
-      'Shopping': Color(0xFFF59E0B), 'Transport': Color(0xFF14B8A6),
-      'Health': Color(0xFFA855F7), 'Water Bill': Color(0xFF5DCAA5),
-      'Education': Color(0xFF14B8A6), 'Salary': Color(0xFF5DCAA5),
-      'Freelance': Color(0xFF818CF8), 'Business': Color(0xFFF59E0B),
-      'Gift': Color(0xFFEC4899), 'Interest': Color(0xFF14B8A6),
+      'Food': Color(0xFFEC4899),
+      'Electricity': Color(0xFF6366F1),
+      'Shopping': Color(0xFFF59E0B),
+      'Transport': Color(0xFF14B8A6),
+      'Health': Color(0xFFA855F7),
+      'Water Bill': Color(0xFF5DCAA5),
+      'Education': Color(0xFF14B8A6),
+      'Salary': Color(0xFF5DCAA5),
+      'Freelance': Color(0xFF818CF8),
+      'Business': Color(0xFFF59E0B),
+      'Gift': Color(0xFFEC4899),
+      'Interest': Color(0xFF14B8A6),
       'Other': Color(0xFFF09595),
     };
     return colors[name] ?? const Color(0xFF888780);
@@ -556,9 +719,15 @@ class _AnalysisPageState extends State<AnalysisPage>
               final w = MediaQuery.of(context).size.width;
               final h = MediaQuery.of(context).size.height;
               return Stack(children: [
-                _Orb(x: -70 + 30 * t, y: -90 + 40 * t, size: 300,
+                _Orb(
+                    x: -70 + 30 * t,
+                    y: -90 + 40 * t,
+                    size: 300,
                     color: _indigo.withOpacity(0.22)),
-                _Orb(x: w - 160 - 20 * t, y: h - 260 + 26 * t, size: 220,
+                _Orb(
+                    x: w - 160 - 20 * t,
+                    y: h - 260 + 26 * t,
+                    size: 220,
                     color: _purple.withOpacity(0.14)),
               ]);
             },
@@ -577,15 +746,21 @@ class _AnalysisPageState extends State<AnalysisPage>
                 children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    child:
+                        Column(mainAxisSize: MainAxisSize.min, children: [
                       Text('EXPENSES',
-                          style: TextStyle(fontFamily: 'SpaceMono',
-                              fontSize: 8, letterSpacing: 2.5,
+                          style: TextStyle(
+                              fontFamily: 'SpaceMono',
+                              fontSize: 8,
+                              letterSpacing: 2.5,
                               color: _indigo.withOpacity(0.6))),
                       const Text('Analysis',
-                          style: TextStyle(fontFamily: 'Outfit',
-                              fontSize: 20, fontWeight: FontWeight.w700,
-                              letterSpacing: -0.3, color: Color(0xFFF8FAFC))),
+                          style: TextStyle(
+                              fontFamily: 'Outfit',
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.3,
+                              color: Color(0xFFF8FAFC))),
                     ]),
                   ),
 
@@ -596,31 +771,41 @@ class _AnalysisPageState extends State<AnalysisPage>
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                       child: Container(
                         height: 42,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 12),
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.04),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
+                          border: Border.all(
+                              color: Colors.white.withOpacity(0.08)),
                         ),
                         child: DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _selectedAccountId,
-                            icon: Icon(Icons.keyboard_arrow_down_rounded,
-                                color: Colors.white.withOpacity(0.3), size: 18),
+                            icon: Icon(
+                                Icons.keyboard_arrow_down_rounded,
+                                color: Colors.white.withOpacity(0.3),
+                                size: 18),
                             dropdownColor: const Color(0xFF1A1D27),
                             isExpanded: true,
-                            style: const TextStyle(fontFamily: 'Outfit',
-                                fontSize: 13, color: Color(0xFFF8FAFC)),
+                            style: const TextStyle(
+                                fontFamily: 'Outfit',
+                                fontSize: 13,
+                                color: Color(0xFFF8FAFC)),
                             items: [
                               DropdownMenuItem<String>(
                                 value: '',
                                 child: Row(children: [
-                                  Icon(Icons.grid_view_rounded, size: 15,
-                                      color: const Color(0xFF818CF8).withOpacity(0.7)),
+                                  Icon(Icons.grid_view_rounded,
+                                      size: 15,
+                                      color: const Color(0xFF818CF8)
+                                          .withOpacity(0.7)),
                                   const SizedBox(width: 8),
                                   const Text('All My Accounts',
-                                      style: TextStyle(fontFamily: 'Outfit',
-                                          fontSize: 13, color: Color(0xFFF8FAFC))),
+                                      style: TextStyle(
+                                          fontFamily: 'Outfit',
+                                          fontSize: 13,
+                                          color: Color(0xFFF8FAFC))),
                                 ]),
                               ),
                               ..._accounts.map((acc) {
@@ -628,29 +813,38 @@ class _AnalysisPageState extends State<AnalysisPage>
                                 return DropdownMenuItem<String>(
                                   value: acc['id'] as String,
                                   child: Row(children: [
-                                    Icon(_accountIcon(type), size: 15,
-                                        color: const Color(0xFF818CF8).withOpacity(0.7)),
+                                    Icon(_accountIcon(type),
+                                        size: 15,
+                                        color: const Color(0xFF818CF8)
+                                            .withOpacity(0.7)),
                                     const SizedBox(width: 8),
                                     Text(acc['name'] as String,
-                                        style: const TextStyle(fontFamily: 'Outfit',
-                                            fontSize: 13, color: Color(0xFFF8FAFC))),
+                                        style: const TextStyle(
+                                            fontFamily: 'Outfit',
+                                            fontSize: 13,
+                                            color: Color(0xFFF8FAFC))),
                                     const SizedBox(width: 6),
                                     Text('· $type',
-                                        style: TextStyle(fontFamily: 'Outfit',
+                                        style: TextStyle(
+                                            fontFamily: 'Outfit',
                                             fontSize: 11,
-                                            color: Colors.white.withOpacity(0.35))),
+                                            color: Colors.white
+                                                .withOpacity(0.35))),
                                   ]),
                                 );
                               }),
                             ],
                             onChanged: (id) {
                               if (id == null) return;
-                              final acc = id.isEmpty ? null
-                                  : _accounts.firstWhere((a) => a['id'] == id);
+                              final acc = id.isEmpty
+                                  ? null
+                                  : _accounts.firstWhere(
+                                      (a) => a['id'] == id);
                               setState(() {
                                 _selectedAccountId = id;
                                 _selectedAccountName = id.isEmpty
-                                    ? 'All Accounts' : acc!['name'] as String;
+                                    ? 'All Accounts'
+                                    : acc!['name'] as String;
                               });
                               _loadData();
                             },
@@ -663,48 +857,74 @@ class _AnalysisPageState extends State<AnalysisPage>
 
                   Expanded(
                     child: _dataLoading
-                        ? Center(child: CircularProgressIndicator(
-                            color: _indigo.withOpacity(0.7), strokeWidth: 2))
+                        ? Center(
+                            child: CircularProgressIndicator(
+                                color: _indigo.withOpacity(0.7),
+                                strokeWidth: 2))
                         : RefreshIndicator(
                             color: _indigo,
                             backgroundColor: const Color(0xFF1A1D27),
                             onRefresh: _loadData,
                             child: SingleChildScrollView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                              physics:
+                                  const AlwaysScrollableScrollPhysics(),
+                              padding: const EdgeInsets.fromLTRB(
+                                  16, 0, 16, 24),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
+                                  // ── Period filter ──────
                                   SingleChildScrollView(
                                     scrollDirection: Axis.horizontal,
                                     child: Row(
                                       children: _periods.map((p) {
                                         final active = _period == p;
                                         return Padding(
-                                          padding: const EdgeInsets.only(right: 8),
+                                          padding: const EdgeInsets.only(
+                                              right: 8),
                                           child: GestureDetector(
                                             onTap: () {
-                                              setState(() => _period = p);
+                                              setState(
+                                                  () => _period = p);
                                               _loadData();
                                             },
                                             child: AnimatedContainer(
-                                              duration: const Duration(milliseconds: 200),
-                                              padding: const EdgeInsets.symmetric(
-                                                  horizontal: 14, vertical: 6),
+                                              duration: const Duration(
+                                                  milliseconds: 200),
+                                              padding: const EdgeInsets
+                                                  .symmetric(
+                                                  horizontal: 14,
+                                                  vertical: 6),
                                               decoration: BoxDecoration(
                                                 color: active
-                                                    ? _indigo.withOpacity(0.18)
-                                                    : Colors.white.withOpacity(0.04),
-                                                borderRadius: BorderRadius.circular(20),
-                                                border: Border.all(color: active
-                                                    ? _indigo.withOpacity(0.45)
-                                                    : Colors.white.withOpacity(0.08)),
+                                                    ? _indigo
+                                                        .withOpacity(0.18)
+                                                    : Colors.white
+                                                        .withOpacity(
+                                                            0.04),
+                                                borderRadius:
+                                                    BorderRadius.circular(
+                                                        20),
+                                                border: Border.all(
+                                                    color: active
+                                                        ? _indigo
+                                                            .withOpacity(
+                                                                0.45)
+                                                        : Colors.white
+                                                            .withOpacity(
+                                                                0.08)),
                                               ),
-                                              child: Text(p, style: TextStyle(
-                                                  fontFamily: 'Outfit', fontSize: 12,
-                                                  color: active
-                                                      ? const Color(0xFF818CF8)
-                                                      : Colors.white.withOpacity(0.4))),
+                                              child: Text(p,
+                                                  style: TextStyle(
+                                                      fontFamily: 'Outfit',
+                                                      fontSize: 12,
+                                                      color: active
+                                                          ? const Color(
+                                                              0xFF818CF8)
+                                                          : Colors.white
+                                                              .withOpacity(
+                                                                  0.4))),
                                             ),
                                           ),
                                         );
@@ -714,36 +934,49 @@ class _AnalysisPageState extends State<AnalysisPage>
 
                                   const SizedBox(height: 12),
 
+                                  // ── No data ────────────
                                   if (_expenses.isEmpty) ...[
                                     Container(
                                       width: double.infinity,
                                       padding: const EdgeInsets.all(32),
                                       decoration: BoxDecoration(
-                                        color: Colors.white.withOpacity(0.02),
-                                        borderRadius: BorderRadius.circular(16),
+                                        color: Colors.white
+                                            .withOpacity(0.02),
+                                        borderRadius:
+                                            BorderRadius.circular(16),
                                         border: Border.all(
-                                            color: Colors.white.withOpacity(0.06)),
+                                            color: Colors.white
+                                                .withOpacity(0.06)),
                                       ),
                                       child: Column(children: [
-                                        Icon(Icons.bar_chart_rounded, size: 40,
-                                            color: Colors.white.withOpacity(0.12)),
+                                        Icon(Icons.bar_chart_rounded,
+                                            size: 40,
+                                            color: Colors.white
+                                                .withOpacity(0.12)),
                                         const SizedBox(height: 12),
                                         Text('No data for this period',
-                                            style: TextStyle(fontFamily: 'Outfit',
+                                            style: TextStyle(
+                                                fontFamily: 'Outfit',
                                                 fontSize: 14,
-                                                color: Colors.white.withOpacity(0.35))),
+                                                color: Colors.white
+                                                    .withOpacity(0.35))),
                                         const SizedBox(height: 4),
-                                        Text('Try a different account or period',
-                                            style: TextStyle(fontFamily: 'Outfit',
+                                        Text(
+                                            'Try a different account or period',
+                                            style: TextStyle(
+                                                fontFamily: 'Outfit',
                                                 fontSize: 11,
-                                                color: Colors.white.withOpacity(0.2))),
+                                                color: Colors.white
+                                                    .withOpacity(0.2))),
                                       ]),
                                     ),
                                   ] else ...[
 
+                                    // ── Summary cards ──────
                                     GridView.count(
                                       shrinkWrap: true,
-                                      physics: const NeverScrollableScrollPhysics(),
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
                                       crossAxisCount: 2,
                                       mainAxisSpacing: 8,
                                       crossAxisSpacing: 8,
@@ -755,12 +988,14 @@ class _AnalysisPageState extends State<AnalysisPage>
                                           sub: _totalIncome > 0
                                               ? '${(_totalSpent / _totalIncome * 100).toStringAsFixed(0)}% of income'
                                               : '$_transactionCount transactions',
-                                          subColor: const Color(0xFFF09595),
+                                          subColor:
+                                              const Color(0xFFF09595),
                                         ),
                                         _SummaryCard(
                                           label: 'Total Income',
                                           value: _fmt(_totalIncome),
-                                          valueColor: const Color(0xFF818CF8),
+                                          valueColor:
+                                              const Color(0xFF818CF8),
                                           sub: _remaining >= 0
                                               ? '${_fmt(_remaining)} left'
                                               : 'Over by ${_fmt(_remaining.abs())}',
@@ -772,13 +1007,15 @@ class _AnalysisPageState extends State<AnalysisPage>
                                           label: 'Transactions',
                                           value: '$_transactionCount',
                                           sub: '${_expenses.where((e) => e['type'] == 'expense').length} exp · ${_expenses.where((e) => e['type'] == 'income').length} inc',
-                                          subColor: Colors.white.withOpacity(0.3),
+                                          subColor: Colors.white
+                                              .withOpacity(0.3),
                                         ),
                                         _SummaryCard(
                                           label: 'Avg / Day',
                                           value: _fmt(_avgPerDay),
                                           sub: '${_periodDays()} days tracked',
-                                          subColor: Colors.white.withOpacity(0.3),
+                                          subColor: Colors.white
+                                              .withOpacity(0.3),
                                         ),
                                       ],
                                     ),
@@ -790,33 +1027,56 @@ class _AnalysisPageState extends State<AnalysisPage>
                                         title: 'Category Spending',
                                         child: Column(children: [
                                           Row(children: [
-                                            Expanded(child: SizedBox(height: 100,
-                                                child: CustomPaint(
-                                                    painter: _BarChartPainter(cats)))),
+                                            Expanded(
+                                                child: SizedBox(
+                                                    height: 100,
+                                                    child: CustomPaint(
+                                                        painter:
+                                                            _BarChartPainter(
+                                                                cats)))),
                                             const SizedBox(width: 12),
-                                            SizedBox(width: 90, height: 100,
+                                            SizedBox(
+                                                width: 90,
+                                                height: 100,
                                                 child: CustomPaint(
                                                     painter: _DonutPainter(
-                                                        cats, _fmt(_totalSpent)))),
+                                                        cats,
+                                                        _fmt(_totalSpent)))),
                                           ]),
                                           const SizedBox(height: 12),
                                           Wrap(
-                                            spacing: 12, runSpacing: 6,
-                                            children: cats.map((c) => Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(width: 8, height: 8,
-                                                    decoration: BoxDecoration(
-                                                        color: c['color'] as Color,
-                                                        shape: BoxShape.circle)),
-                                                const SizedBox(width: 5),
-                                                Text(c['name'] as String,
-                                                    style: TextStyle(
-                                                        fontFamily: 'Outfit',
-                                                        fontSize: 10,
-                                                        color: Colors.white.withOpacity(0.45))),
-                                              ],
-                                            )).toList(),
+                                            spacing: 12,
+                                            runSpacing: 6,
+                                            children: cats
+                                                .map((c) => Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Container(
+                                                            width: 8,
+                                                            height: 8,
+                                                            decoration: BoxDecoration(
+                                                                color: c['color']
+                                                                    as Color,
+                                                                shape: BoxShape
+                                                                    .circle)),
+                                                        const SizedBox(
+                                                            width: 5),
+                                                        Text(
+                                                            c['name']
+                                                                as String,
+                                                            style: TextStyle(
+                                                                fontFamily:
+                                                                    'Outfit',
+                                                                fontSize:
+                                                                    10,
+                                                                color: Colors
+                                                                    .white
+                                                                    .withOpacity(
+                                                                        0.45))),
+                                                      ],
+                                                    ))
+                                                .toList(),
                                           ),
                                         ]),
                                       ),
@@ -827,13 +1087,17 @@ class _AnalysisPageState extends State<AnalysisPage>
                                       _Card(
                                         title: 'Top Spending',
                                         child: Column(
-                                          children: cats.take(6).toList()
-                                              .asMap().entries
+                                          children: cats
+                                              .take(6)
+                                              .toList()
+                                              .asMap()
+                                              .entries
                                               .map((e) => _TopSpendingItem(
-                                                rank: e.key + 1,
-                                                category: e.value,
-                                                totalSpent: _totalSpent,
-                                              )).toList(),
+                                                    rank: e.key + 1,
+                                                    category: e.value,
+                                                    totalSpent: _totalSpent,
+                                                  ))
+                                              .toList(),
                                         ),
                                       ),
 
@@ -842,7 +1106,8 @@ class _AnalysisPageState extends State<AnalysisPage>
                                     if (trend.length > 1)
                                       _Card(
                                         title: 'Monthly Trend',
-                                        child: SizedBox(height: 110,
+                                        child: SizedBox(
+                                            height: 110,
                                             child: CustomPaint(
                                               size: Size.infinite,
                                               painter: _LineTrendPainter(
@@ -858,58 +1123,91 @@ class _AnalysisPageState extends State<AnalysisPage>
                                     _Card(
                                       title: 'Income vs Expense',
                                       child: Column(children: [
-                                        _CompareRow(label: 'Income',
+                                        _CompareRow(
+                                            label: 'Income',
                                             value: _totalIncome,
-                                            max: max(_totalIncome, _totalSpent),
-                                            color: const Color(0xFF5DCAA5),
-                                            formatted: _fmt(_totalIncome)),
+                                            max: max(_totalIncome,
+                                                _totalSpent),
+                                            color:
+                                                const Color(0xFF5DCAA5),
+                                            formatted:
+                                                _fmt(_totalIncome)),
                                         const SizedBox(height: 10),
-                                        _CompareRow(label: 'Expense',
+                                        _CompareRow(
+                                            label: 'Expense',
                                             value: _totalSpent,
-                                            max: max(_totalIncome, _totalSpent),
-                                            color: const Color(0xFFF09595),
+                                            max: max(_totalIncome,
+                                                _totalSpent),
+                                            color:
+                                                const Color(0xFFF09595),
                                             formatted: _fmt(_totalSpent)),
                                         const SizedBox(height: 10),
                                         _CompareRow(
                                             label: 'Savings',
                                             value: _remaining.abs(),
-                                            max: max(_totalIncome, _totalSpent),
+                                            max: max(_totalIncome,
+                                                _totalSpent),
                                             color: _remaining >= 0
                                                 ? const Color(0xFF818CF8)
                                                 : const Color(0xFFF59E0B),
-                                            formatted: '${_remaining >= 0 ? '+' : '-'}${_fmt(_remaining.abs())}'),
+                                            formatted:
+                                                '${_remaining >= 0 ? '+' : '-'}${_fmt(_remaining.abs())}'),
                                       ]),
                                     ),
 
                                     const SizedBox(height: 12),
 
                                     GestureDetector(
-                                      onTap: _pdfLoading ? null : _downloadPdf,
+                                      onTap: _pdfLoading
+                                          ? null
+                                          : _downloadPdf,
                                       child: Container(
-                                        width: double.infinity, height: 48,
+                                        width: double.infinity,
+                                        height: 48,
                                         decoration: BoxDecoration(
-                                          gradient: const LinearGradient(colors: [
-                                            Color(0xFF6366F1), Color(0xFF8B5CF6)]),
-                                          borderRadius: BorderRadius.circular(13),
-                                          boxShadow: [BoxShadow(
-                                              color: _indigo.withOpacity(0.3),
-                                              blurRadius: 12,
-                                              offset: const Offset(0, 4))],
+                                          gradient:
+                                              const LinearGradient(colors: [
+                                            Color(0xFF6366F1),
+                                            Color(0xFF8B5CF6)
+                                          ]),
+                                          borderRadius:
+                                              BorderRadius.circular(13),
+                                          boxShadow: [
+                                            BoxShadow(
+                                                color: _indigo
+                                                    .withOpacity(0.3),
+                                                blurRadius: 12,
+                                                offset: const Offset(0, 4))
+                                          ],
                                         ),
                                         child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
                                           children: [
                                             _pdfLoading
-                                                ? const SizedBox(width: 16, height: 16,
-                                                    child: CircularProgressIndicator(
-                                                        color: Colors.white, strokeWidth: 2))
-                                                : const Icon(Icons.picture_as_pdf_rounded,
-                                                    size: 18, color: Colors.white),
+                                                ? const SizedBox(
+                                                    width: 16,
+                                                    height: 16,
+                                                    child:
+                                                        CircularProgressIndicator(
+                                                            color:
+                                                                Colors.white,
+                                                            strokeWidth: 2))
+                                                : const Icon(
+                                                    Icons
+                                                        .picture_as_pdf_rounded,
+                                                    size: 18,
+                                                    color: Colors.white),
                                             const SizedBox(width: 8),
                                             Text(
-                                              _pdfLoading ? 'Generating...' : 'Download PDF Report',
-                                              style: const TextStyle(fontFamily: 'Outfit',
-                                                  fontSize: 13, fontWeight: FontWeight.w600,
+                                              _pdfLoading
+                                                  ? 'Generating...'
+                                                  : 'Download PDF Report',
+                                              style: const TextStyle(
+                                                  fontFamily: 'Outfit',
+                                                  fontSize: 13,
+                                                  fontWeight:
+                                                      FontWeight.w600,
                                                   color: Colors.white),
                                             ),
                                           ],
@@ -938,27 +1236,43 @@ class _CompareRow extends StatelessWidget {
   final String label, formatted;
   final double value, max;
   final Color color;
-  const _CompareRow({required this.label, required this.value,
-      required this.max, required this.color, required this.formatted});
+  const _CompareRow(
+      {required this.label,
+      required this.value,
+      required this.max,
+      required this.color,
+      required this.formatted});
 
   @override
   Widget build(BuildContext context) {
     final pct = max > 0 ? (value / max).clamp(0.0, 1.0) : 0.0;
     return Row(children: [
-      SizedBox(width: 60, child: Text(label, style: TextStyle(
-          fontFamily: 'Outfit', fontSize: 11,
-          color: Colors.white.withOpacity(0.45)))),
-      Expanded(child: ClipRRect(
+      SizedBox(
+          width: 60,
+          child: Text(label,
+              style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  color: Colors.white.withOpacity(0.45)))),
+      Expanded(
+          child: ClipRRect(
         borderRadius: BorderRadius.circular(100),
-        child: LinearProgressIndicator(value: pct, minHeight: 7,
+        child: LinearProgressIndicator(
+            value: pct,
+            minHeight: 7,
             backgroundColor: Colors.white.withOpacity(0.06),
             valueColor: AlwaysStoppedAnimation<Color>(color)),
       )),
       const SizedBox(width: 10),
-      SizedBox(width: 80, child: Text(formatted,
-          textAlign: TextAlign.right,
-          style: TextStyle(fontFamily: 'Outfit', fontSize: 11,
-              fontWeight: FontWeight.w600, color: color))),
+      SizedBox(
+          width: 80,
+          child: Text(formatted,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: color))),
     ]);
   }
 }
@@ -969,8 +1283,12 @@ class _SummaryCard extends StatelessWidget {
   final String label, value, sub;
   final Color? valueColor;
   final Color subColor;
-  const _SummaryCard({required this.label, required this.value,
-      required this.sub, required this.subColor, this.valueColor});
+  const _SummaryCard(
+      {required this.label,
+      required this.value,
+      required this.sub,
+      required this.subColor,
+      this.valueColor});
 
   @override
   Widget build(BuildContext context) {
@@ -981,19 +1299,30 @@ class _SummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(13),
         border: Border.all(color: Colors.white.withOpacity(0.07)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center, children: [
-        Text(label.toUpperCase(), style: TextStyle(fontFamily: 'Outfit',
-            fontSize: 9, letterSpacing: 0.6,
-            color: Colors.white.withOpacity(0.3))),
-        const SizedBox(height: 4),
-        Text(value, style: TextStyle(fontFamily: 'Outfit', fontSize: 15,
-            fontWeight: FontWeight.w700,
-            color: valueColor ?? const Color(0xFFF8FAFC))),
-        const SizedBox(height: 2),
-        Text(sub, style: TextStyle(fontFamily: 'Outfit', fontSize: 9,
-            color: subColor), maxLines: 1, overflow: TextOverflow.ellipsis),
-      ]),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(label.toUpperCase(),
+                style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 9,
+                    letterSpacing: 0.6,
+                    color: Colors.white.withOpacity(0.3))),
+            const SizedBox(height: 4),
+            Text(value,
+                style: TextStyle(
+                    fontFamily: 'Outfit',
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: valueColor ?? const Color(0xFFF8FAFC))),
+            const SizedBox(height: 2),
+            Text(sub,
+                style: TextStyle(
+                    fontFamily: 'Outfit', fontSize: 9, color: subColor),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ]),
     );
   }
 }
@@ -1015,9 +1344,12 @@ class _Card extends StatelessWidget {
         border: Border.all(color: Colors.white.withOpacity(0.07)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(fontFamily: 'Outfit',
-            fontSize: 14, fontWeight: FontWeight.w600,
-            color: Color(0xFFF8FAFC))),
+        Text(title,
+            style: const TextStyle(
+                fontFamily: 'Outfit',
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFFF8FAFC))),
         const SizedBox(height: 12),
         child,
       ]),
@@ -1031,7 +1363,9 @@ class _TopSpendingItem extends StatelessWidget {
   final int rank;
   final Map<String, dynamic> category;
   final double totalSpent;
-  const _TopSpendingItem({required this.rank, required this.category,
+  const _TopSpendingItem(
+      {required this.rank,
+      required this.category,
       required this.totalSpent});
 
   @override
@@ -1042,36 +1376,56 @@ class _TopSpendingItem extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(children: [
-        SizedBox(width: 22, child: Text('#$rank',
-            style: TextStyle(fontFamily: 'SpaceMono', fontSize: 10,
-                color: Colors.white.withOpacity(0.25)))),
-        Container(width: 34, height: 34,
-            decoration: BoxDecoration(color: color.withOpacity(0.12),
+        SizedBox(
+            width: 22,
+            child: Text('#$rank',
+                style: TextStyle(
+                    fontFamily: 'SpaceMono',
+                    fontSize: 10,
+                    color: Colors.white.withOpacity(0.25)))),
+        Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: color.withOpacity(0.22))),
-            child: Icon(category['icon'] as IconData, size: 16, color: color)),
+            child: Icon(category['icon'] as IconData,
+                size: 16, color: color)),
         const SizedBox(width: 10),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-          Text(category['name'] as String, style: const TextStyle(
-              fontFamily: 'Outfit', fontSize: 12,
-              fontWeight: FontWeight.w500, color: Color(0xFFF8FAFC))),
-          const SizedBox(height: 4),
-          ClipRRect(borderRadius: BorderRadius.circular(100),
-              child: LinearProgressIndicator(
-                value: category['pct'] as double, minHeight: 4,
-                backgroundColor: Colors.white.withOpacity(0.07),
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-              )),
-        ])),
+        Expanded(
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Text(category['name'] as String,
+                  style: const TextStyle(
+                      fontFamily: 'Outfit',
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xFFF8FAFC))),
+              const SizedBox(height: 4),
+              ClipRRect(
+                  borderRadius: BorderRadius.circular(100),
+                  child: LinearProgressIndicator(
+                    value: category['pct'] as double,
+                    minHeight: 4,
+                    backgroundColor: Colors.white.withOpacity(0.07),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
+                  )),
+            ])),
         const SizedBox(width: 10),
         Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text(_fmtDouble(amount), style: const TextStyle(
-              fontFamily: 'Outfit', fontSize: 11,
-              fontWeight: FontWeight.w600, color: Color(0xFFF8FAFC))),
-          Text('${pct.toStringAsFixed(1)}%', style: TextStyle(
-              fontFamily: 'Outfit', fontSize: 9,
-              color: color.withOpacity(0.7))),
+          Text(_fmtDouble(amount),
+              style: const TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFFF8FAFC))),
+          Text('${pct.toStringAsFixed(1)}%',
+              style: TextStyle(
+                  fontFamily: 'Outfit',
+                  fontSize: 9,
+                  color: color.withOpacity(0.7))),
         ]),
       ]),
     );
@@ -1095,9 +1449,10 @@ class _BarChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (categories.isEmpty) return;
-    final maxAmt = categories
-        .map((c) => c['amount'] as double).reduce(max);
-    final barW = (size.width - (categories.length - 1) * 6) / categories.length;
+    final maxAmt =
+        categories.map((c) => c['amount'] as double).reduce(max);
+    final barW =
+        (size.width - (categories.length - 1) * 6) / categories.length;
 
     for (int i = 0; i < categories.length; i++) {
       final pct = (categories[i]['amount'] as double) / maxAmt;
@@ -1108,7 +1463,8 @@ class _BarChartPainter extends CustomPainter {
         RRect.fromRectAndRadius(
             Rect.fromLTWH(x, y, barW, barH), const Radius.circular(4)),
         Paint()
-          ..color = (categories[i]['color'] as Color).withOpacity(0.85)
+          ..color =
+              (categories[i]['color'] as Color).withOpacity(0.85)
           ..style = PaintingStyle.fill,
       );
     }
@@ -1127,7 +1483,6 @@ class _BarChartPainter extends CustomPainter {
 }
 
 // ── Donut Painter ──────────────────────────────────────────────────────────
-// ← KEY FIX: replaced TextPainter with ui.ParagraphBuilder
 
 class _DonutPainter extends CustomPainter {
   final List<Map<String, dynamic>> categories;
@@ -1138,7 +1493,8 @@ class _DonutPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (categories.isEmpty) return;
     final total = categories
-        .map((c) => c['amount'] as double).fold(0.0, (a, b) => a + b);
+        .map((c) => c['amount'] as double)
+        .fold(0.0, (a, b) => a + b);
     final center = Offset(size.width / 2, size.height / 2);
     final radius = min(size.width, size.height) / 2 - 8;
     const strokeW = 14.0;
@@ -1148,7 +1504,9 @@ class _DonutPainter extends CustomPainter {
       final sweep = 2 * pi * (cat['amount'] as double) / total;
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
-        startAngle, sweep - 0.08, false,
+        startAngle,
+        sweep - 0.08,
+        false,
         Paint()
           ..color = cat['color'] as Color
           ..style = PaintingStyle.stroke
@@ -1158,7 +1516,6 @@ class _DonutPainter extends CustomPainter {
       startAngle += sweep;
     }
 
-    // ← Fixed: ui.ParagraphBuilder instead of TextPainter
     final pb = ui.ParagraphBuilder(
       ui.ParagraphStyle(
         textAlign: TextAlign.center,
@@ -1190,14 +1547,15 @@ class _DonutPainter extends CustomPainter {
 }
 
 // ── Line Trend Painter ─────────────────────────────────────────────────────
-// ← KEY FIX: replaced TextPainter with ui.ParagraphBuilder
 
 class _LineTrendPainter extends CustomPainter {
   final List<double> values;
   final List<String> labels;
   final Color color;
-  const _LineTrendPainter({
-      required this.values, required this.labels, required this.color});
+  const _LineTrendPainter(
+      {required this.values,
+      required this.labels,
+      required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1215,8 +1573,8 @@ class _LineTrendPainter extends CustomPainter {
       points.add(Offset(x, y));
     }
 
-    // Fill
-    final fillPath = Path()..moveTo(points.first.dx, points.first.dy);
+    final fillPath = Path()
+      ..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       fillPath.lineTo(points[i].dx, points[i].dy);
     }
@@ -1225,44 +1583,51 @@ class _LineTrendPainter extends CustomPainter {
       ..lineTo(points.first.dx, chartH)
       ..close();
 
-    canvas.drawPath(fillPath, Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-        colors: [
-          Color.fromRGBO(color.red, color.green, color.blue, 0.3),
-          Color.fromRGBO(color.red, color.green, color.blue, 0.0),
-        ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
+    canvas.drawPath(
+        fillPath,
+        Paint()
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.fromRGBO(color.red, color.green, color.blue, 0.3),
+              Color.fromRGBO(color.red, color.green, color.blue, 0.0),
+            ],
+          ).createShader(
+              Rect.fromLTWH(0, 0, size.width, size.height)));
 
-    // Line
-    final linePath = Path()..moveTo(points.first.dx, points.first.dy);
+    final linePath = Path()
+      ..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {
       linePath.lineTo(points[i].dx, points[i].dy);
     }
-    canvas.drawPath(linePath, Paint()
-      ..color = Color.fromRGBO(color.red, color.green, color.blue, 0.7)
-      ..strokeWidth = 1.8
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round);
+    canvas.drawPath(
+        linePath,
+        Paint()
+          ..color =
+              Color.fromRGBO(color.red, color.green, color.blue, 0.7)
+          ..strokeWidth = 1.8
+          ..style = PaintingStyle.stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round);
 
-    // Peak dot
     final peakIdx = values.indexOf(values.reduce(max));
     canvas.drawCircle(points[peakIdx], 4, Paint()..color = color);
-    canvas.drawCircle(points[peakIdx], 7,
-        Paint()..color = Color.fromRGBO(
-            color.red, color.green, color.blue, 0.2));
+    canvas.drawCircle(
+        points[peakIdx],
+        7,
+        Paint()
+          ..color = Color.fromRGBO(
+              color.red, color.green, color.blue, 0.2));
 
-    // Labels — ← Fixed: ui.ParagraphBuilder instead of TextPainter
     for (int i = 0; i < labels.length; i++) {
-      final pb = ui.ParagraphBuilder(
-        ui.ParagraphStyle(fontSize: 8),
-      )
-        ..pushStyle(ui.TextStyle(
-          color: const Color(0x40FFFFFF),
-          fontSize: 8,
-        ))
-        ..addText(labels[i]);
+      final pb =
+          ui.ParagraphBuilder(ui.ParagraphStyle(fontSize: 8))
+            ..pushStyle(ui.TextStyle(
+              color: const Color(0x40FFFFFF),
+              fontSize: 8,
+            ))
+            ..addText(labels[i]);
 
       final p = pb.build()
         ..layout(const ui.ParagraphConstraints(width: 30));
@@ -1283,15 +1648,22 @@ class _LineTrendPainter extends CustomPainter {
 class _Orb extends StatelessWidget {
   final double x, y, size;
   final Color color;
-  const _Orb({required this.x, required this.y,
-      required this.size, required this.color});
+  const _Orb(
+      {required this.x,
+      required this.y,
+      required this.size,
+      required this.color});
   @override
   Widget build(BuildContext context) => Positioned(
-        left: x, top: y,
-        child: Container(width: size, height: size,
-            decoration: BoxDecoration(shape: BoxShape.circle,
-                gradient: RadialGradient(
-                    colors: [color, Colors.transparent]))));
+      left: x,
+      top: y,
+      child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                  colors: [color, Colors.transparent]))));
 }
 
 class _GridPainter extends CustomPainter {
@@ -1308,6 +1680,7 @@ class _GridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), p);
     }
   }
+
   @override
   bool shouldRepaint(_) => false;
 }
